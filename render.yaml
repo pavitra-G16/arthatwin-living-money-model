@@ -18,7 +18,12 @@ services:
       - key: DEMO_RESET_TOKEN
         generateValue: true
       - key: CORS_ALLOWED_ORIGINS
-        value: "*"
+        fromService:
+          type: web
+          name: arthatwin-post-submission-web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: APP_ENV
+        value: production
 
   - type: web
     name: arthatwin-post-submission-web
@@ -30,6 +35,9 @@ services:
     startCommand: "npm run start -- --hostname 0.0.0.0 --port $PORT"
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        sync: false
+        fromService:
+          type: web
+          name: arthatwin-post-submission-api
+          envVarKey: RENDER_EXTERNAL_URL
       - key: NEXT_PUBLIC_ARTHATWIN_PUBLIC_DEMO
         value: "1"

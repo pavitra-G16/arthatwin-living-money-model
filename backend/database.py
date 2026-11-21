@@ -14,6 +14,9 @@ def normalize_database_url(value: str) -> str:
 
 DATABASE_URL = normalize_database_url(os.getenv("DATABASE_URL", "sqlite:///./arthatwin.db"))
 
+if os.getenv("APP_ENV", "development").lower() == "production" and not DATABASE_URL.startswith("postgresql+"):
+    raise RuntimeError("Production requires a PostgreSQL DATABASE_URL; SQLite is only supported for local development")
+
 engine_options = {"connect_args": {"check_same_thread": False}} if DATABASE_URL.startswith("sqlite") else {}
 engine = create_engine(DATABASE_URL, **engine_options)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

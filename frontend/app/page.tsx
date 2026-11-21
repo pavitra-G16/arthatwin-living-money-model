@@ -9,7 +9,8 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
 } from "recharts";
 
-const API = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api").replace(/\/$/, "");
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "https://arthatwin-living-money-model.onrender.com/api").replace(/\/$/, "");
+const API = API_BASE.endsWith("/api") ? API_BASE : `${API_BASE}/api`;
 const PUBLIC_DEMO = process.env.NEXT_PUBLIC_ARTHATWIN_PUBLIC_DEMO === "1";
 
 const CATEGORIES = [
