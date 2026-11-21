@@ -10,7 +10,7 @@ ArthaTwin builds a transparent “living money model” from messy Indian bank e
 - Repository: https://github.com/pavitra-G16/arthatwin-living-money-model
 - Backend health: https://arthatwin-living-money-model.onrender.com/api/health
 
-Verified live on 2026-11-21: commit `4c19a37` is deployed to both Render services. The dashboard and backend API agree on the November synthetic demo figures (₹85,000 income; ₹34,006 expenses after refunds; ₹50,994 observed net savings; ₹44,172 modeled surplus). The shared demo has no login and uses ephemeral SQLite; do not enter private financial data. Print/PDF output and complete hosted browser journeys have not been verified.
+Verified live on 2026-11-21: commit `cef9480` is deployed to both Render services (frontend deploy `dep-dc0shf95efls73eg1b50`, backend deploy `dep-dc0shf95efls73eg1b80`). The dashboard and backend API agree on the November synthetic demo figures (₹85,000 income; ₹34,006 expenses after refunds; ₹50,994 observed net savings; ₹44,172 modeled surplus). The shared demo has no login and uses ephemeral SQLite; do not enter private financial data. Print/PDF output and complete hosted browser journeys have not been verified.
 
 ## Demo video (60–90 seconds)
 

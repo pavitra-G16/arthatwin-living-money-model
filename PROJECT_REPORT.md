@@ -27,7 +27,7 @@ Indian bank data arrives as CSV rows, statement PDFs, and SMS text with noisy UP
 - The overview now features an animated, reduced-motion-aware outflow ring computed from observed income and expenses, plus actual imported/modelled figures. No decorative sample amounts are used in the visualization.
 - External AI consent now resets after each coach question; navigation and rule-memory labels distinguish deterministic rules from an LLM.
 - The sample has 16 rows total across two months; 14 belong to November. Exact totals and the dining/rent scenarios are documented in [FEATURES_AND_REQUIREMENTS.md](FEATURES_AND_REQUIREMENTS.md).
-- Commit `4c19a37` is live on both Render services. The live frontend dashboard and direct backend dashboard API agree on November totals: ₹85,000 income, ₹34,006 expenses after refunds, ₹50,994 observed net savings, and ₹44,172 modeled surplus.
+- Commit `cef9480` is live on both Render services. The live frontend dashboard and direct backend report API agree on November totals: ₹85,000 income, ₹34,006 expenses after refunds, ₹50,994 observed net savings, and ₹44,172 modeled surplus. A 390 px mobile viewport was also inspected; wider device coverage remains unverified.
 
 ## Known limitations
 
