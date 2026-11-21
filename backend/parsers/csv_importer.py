@@ -78,8 +78,10 @@ def _parse_money(value: str) -> Decimal:
         amount = Decimal(candidate)
     except InvalidOperation as exc:
         raise ValueError(f"invalid amount '{value}'") from exc
-    if not amount.is_finite() or amount == 0:
-        raise ValueError("amount must be a finite non-zero value")
+    if not amount.is_finite():
+        raise ValueError(f"invalid amount '{value}' (must be finite)")
+    if amount == 0:
+        raise ValueError("amount must be non-zero")
     if abs(amount.as_tuple().exponent) > 2:
         raise ValueError("amount must have no more than two decimal places")
     if negative:
@@ -213,8 +215,10 @@ def _parse_money_signed(value: str) -> Decimal:
         amount = Decimal(candidate)
     except InvalidOperation as exc:
         raise ValueError(f"invalid amount '{value}'") from exc
-    if not amount.is_finite() or amount == 0:
-        raise ValueError("amount must be a finite non-zero value")
+    if not amount.is_finite():
+        raise ValueError(f"invalid amount '{value}' (must be finite)")
+    if amount == 0:
+        raise ValueError("amount must be non-zero")
     if abs(amount.as_tuple().exponent) > 2:
         raise ValueError("amount must have no more than two decimal places")
     if negative:

@@ -56,7 +56,7 @@ def create_batch(
         id=str(uuid.uuid4()), source_format=source_format, source_name=source_name,
         total_rows=total_rows, imported_count=0, rejected_count=len(errors),
         duplicate_count=0, probable_duplicate_count=0,
-        review_required_count=0, ignored_count=ignored_count,
+        review_required_count=0, ignored_count=max(ignored_count, len(ignored_rows or [])),
         balance_reconciliation=balance_reconciliation, warnings=warnings or [],
     )
     db.add(batch)
@@ -113,7 +113,8 @@ def create_batch(
         db.add(transaction)
         db.add(ImportRow(
             id=str(uuid.uuid4()), batch_id=batch.id, row_number=row_number,
-            status=duplicate_status, message=duplicate_reason, raw_source_text=item.raw_text,
+            status=("imported" if duplicate_status == "none" else duplicate_status),
+            message=duplicate_reason, raw_source_text=item.raw_text,
             transaction_id=transaction_id,
         ))
         batch.imported_count += 1
