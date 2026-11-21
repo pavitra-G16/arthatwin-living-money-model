@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Sparkles, ShieldAlert, TrendingUp, Brain, Sliders, MessageSquare,
   FileText, Upload, CheckCircle2, AlertTriangle, RefreshCw, Lock, Printer, Send
@@ -15,17 +15,52 @@ const CATEGORIES = [
   "Dining Out", "Groceries", "Transport", "Travel", "Subscriptions",
   "Utilities", "Housing", "Health", "Shopping", "Transfers / People", "Income"
 ];
+const SUBSCRIPTION_OPTIONS = ["yes", "no", "unsure"] as const;
+const PROFILE_FIELDS: Array<{ label: string; key: keyof Profile }> = [
+  { label: "Monthly income", key: "monthly_income" },
+  { label: "Fixed monthly costs", key: "fixed_costs" },
+  { label: "Emergency fund saved", key: "emergency_fund_current" },
+  { label: "Emergency fund target", key: "emergency_fund_target" },
+  { label: "Discretionary budget", key: "discretionary_budget" },
+];
 
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ec4899", "#06b6d4", "#8b5cf6", "#f43f5e"];
 
+type Tab = "overview" | "ledger" | "simulator" | "coach" | "report";
+type Profile = {
+  monthly_income: number;
+  fixed_costs: number;
+  emergency_fund_current: number;
+  emergency_fund_target: number;
+  discretionary_budget: number;
+};
+type Goal = { id: number; name: string; target_amount: number; saved_amount: number; target_date: string; priority: number };
+type GoalDraft = Omit<Goal, "id"> & { id?: number };
+type Transaction = { id: number; date: string; raw_narration: string; merchant: string; amount: number; txn_type: string; category: string; source: string; confidence_source: string; user_locked: boolean; security_flag: string | null };
+type LearnedRule = { id: number; pattern: string; category: string; explanation: string; hit_count: number };
+type RecurringAlert = { merchant: string; type: string; reason: string; monthly_amount: number; annual_cost: number; still_uses: "yes" | "no" | "unsure" };
+type Dashboard = {
+  health_score: number; profile: Profile; goals: Goal[]; transactions: Transaction[];
+  learned_rules: LearnedRule[]; recurring_alerts: RecurringAlert[];
+  nudges: Array<{ severity: string; title: string; message: string }>;
+  category_breakdown: Array<{ name: string; value: number }>;
+  total_spent: number; disclaimer: string;
+};
+type Simulation = {
+  simulated_monthly_surplus: number; monthly_delta: number; assumptions: string;
+  goal_impacts: Array<{ goal_name: string; projected_completion: string | null; new_months: number | null; days_saved: number | null }>;
+};
+type AgentTrace = { event: string; summary: string; pattern_extracted?: string; transition?: string; retroactive_updates?: number };
+type ChatMessage = { role: "assistant" | "user"; text: string; guardrail?: boolean };
+
 export default function ArthaTwinDashboard() {
-  const [data, setData] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "ledger" | "simulator" | "coach" | "report">("overview");
+  const [data, setData] = useState<Dashboard | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [loading, setLoading] = useState(false);
-  const [agentTrace, setAgentTrace] = useState<any>(null);
+  const [agentTrace, setAgentTrace] = useState<AgentTrace | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [profileDraft, setProfileDraft] = useState<any>(null);
-  const [goalDraft, setGoalDraft] = useState<any>(null);
+  const [profileDraft, setProfileDraft] = useState<Profile | null>(null);
+  const [goalDraft, setGoalDraft] = useState<GoalDraft | null>(null);
 
   // Ingestion states
   const [smsText, setSmsText] = useState("");
@@ -36,28 +71,28 @@ export default function ArthaTwinDashboard() {
   const [rentChange, setRentChange] = useState(0);
   const [cancelSubs, setCancelSubs] = useState(true);
   const [extraIncome, setExtraIncome] = useState(0);
-  const [simResult, setSimResult] = useState<any>(null);
+  const [simResult, setSimResult] = useState<Simulation | null>(null);
 
   // Coach states
   const [chatInput, setChatInput] = useState("");
-  const [messages, setMessages] = useState<Array<{ role: string; text: string; guardrail?: boolean }>>([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
       text: "Namaste! I am ArthaTwin, your Living Money Model coach. Load your bank statements or click 'Load Sample Indian Bank Data' above, then ask me about spending trade-offs or goal timelines."
     }
   ]);
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = useCallback(async () => {
     try {
       const res = await fetch(`${API}/dashboard`);
-      const json = await res.json();
+      const json = await res.json() as Dashboard;
       setData(json);
     } catch (e) {
       console.error("Backend not reachable", e);
     }
-  };
+  }, []);
 
-  const runSimulation = async (dCut = diningCut, rChg = rentChange, cSubs = cancelSubs, eInc = extraIncome) => {
+  const runSimulation = useCallback(async (dCut: number, rChg: number, cSubs: boolean, eInc: number) => {
     try {
       const res = await fetch(`${API}/simulate`, {
         method: "POST",
@@ -69,22 +104,25 @@ export default function ArthaTwinDashboard() {
           extra_income: eInc
         })
       });
-      setSimResult(await res.json());
+      setSimResult(await res.json() as Simulation);
     } catch (e) {
       console.error(e);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchDashboard();
-    runSimulation();
-  }, []);
+    const timer = window.setTimeout(() => {
+      void fetchDashboard();
+      void runSimulation(30, 0, true, 0);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchDashboard, runSimulation]);
 
   const handleSeedDemo = async () => {
     setLoading(true);
     await fetch(`${API}/seed-demo`, { method: "POST" });
     await fetchDashboard();
-    await runSimulation();
+    await runSimulation(diningCut, rentChange, cancelSubs, extraIncome);
     setAgentTrace({
       event: "MULTI_FORMAT_INGESTION_COMPLETE",
       summary: "Ingested 16 messy Indian transactions across PDF, CSV, and SMS. Quarantined 1 prompt-injection narration and flagged 2 recurring subscription anomalies."
@@ -93,6 +131,7 @@ export default function ArthaTwinDashboard() {
   };
 
   const openProfileEditor = () => {
+    if (!data) return;
     setProfileDraft({ ...data.profile });
     setGoalDraft(data.goals[0] ? { ...data.goals[0] } : { name: "New goal", target_amount: 100000, saved_amount: 0, target_date: "2027-12-31", priority: 1 });
     setProfileOpen(true);
@@ -103,7 +142,7 @@ export default function ArthaTwinDashboard() {
     await fetch(`${API}/goals`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(goalDraft) });
     setProfileOpen(false);
     await fetchDashboard();
-    await runSimulation();
+    await runSimulation(diningCut, rentChange, cancelSubs, extraIncome);
   };
 
   const handleCategoryFix = async (txnId: number, newCategory: string) => {
@@ -112,15 +151,15 @@ export default function ArthaTwinDashboard() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ new_category: newCategory })
     });
-    const json = await res.json();
+    const json = await res.json() as { agent_trace?: AgentTrace };
     if (json.agent_trace) {
       setAgentTrace(json.agent_trace);
     }
     await fetchDashboard();
-    await runSimulation();
+    await runSimulation(diningCut, rentChange, cancelSubs, extraIncome);
   };
 
-  const handleSubFeedback = async (merchant: string, still_uses: string) => {
+  const handleSubFeedback = async (merchant: string, still_uses: RecurringAlert["still_uses"]) => {
     await fetch(`${API}/subscriptions/feedback`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -136,11 +175,11 @@ export default function ArthaTwinDashboard() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sms_text: smsText })
     });
-    const json = await res.json();
+    const json = await res.json() as { ingested: number; ignored_otp_promo: number };
     setIngestBanner(`Parsed ${json.ingested} transaction SMS (filtered out ${json.ignored_otp_promo} OTP/promo messages).`);
     setSmsText("");
     await fetchDashboard();
-    await runSimulation();
+    await runSimulation(diningCut, rentChange, cancelSubs, extraIncome);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -148,10 +187,10 @@ export default function ArthaTwinDashboard() {
     const formData = new FormData();
     formData.append("file", e.target.files[0]);
     const res = await fetch(`${API}/ingest/file`, { method: "POST", body: formData });
-    const json = await res.json();
+    const json = await res.json() as { ingested: number };
     setIngestBanner(`Ingested ${json.ingested} rows from ${e.target.files[0].name}.`);
     await fetchDashboard();
-    await runSimulation();
+    await runSimulation(diningCut, rentChange, cancelSubs, extraIncome);
   };
 
   const handleSendChat = async (customPrompt?: string) => {
@@ -164,7 +203,7 @@ export default function ArthaTwinDashboard() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: query })
     });
-    const json = await res.json();
+    const json = await res.json() as { reply: string; guardrail_triggered: boolean };
     setMessages((prev) => [
       ...prev,
       { role: "assistant", text: json.reply, guardrail: json.guardrail_triggered }
@@ -227,7 +266,7 @@ export default function ArthaTwinDashboard() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id as Tab)}
                 className={`px-4 py-2.5 text-sm font-medium flex items-center gap-2 border-b-2 transition whitespace-nowrap cursor-pointer ${
                   activeTab === tab.id
                     ? "border-indigo-500 text-indigo-300"
@@ -268,7 +307,7 @@ export default function ArthaTwinDashboard() {
               <button onClick={openProfileEditor} className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm font-medium">Edit Profile &amp; Goals</button>
             </div>
             {/* Proactive Drift Nudges */}
-            {data.nudges.map((n: any, idx: number) => (
+            {data.nudges.map((n, idx) => (
               <div key={idx} className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
                 <div>
@@ -337,20 +376,22 @@ export default function ArthaTwinDashboard() {
                     Simulate What-If →
                   </button>
                 </div>
-                {data.goals.map((g: any) => {
-                  const pct = Math.min(100, Math.round(((((g.saved_amount ?? g.current_amount ?? 0) ?? g.current_amount ?? 0) ?? 0) / Math.max(((g.target_amount ?? 0) ?? 0) ?? 0, 1)) * 100));
+                {data.goals.map((g) => {
+                  const savedAmount = g.saved_amount ?? 0;
+                  const targetAmount = g.target_amount ?? 0;
+                  const pct = Math.min(100, Math.round((savedAmount / Math.max(targetAmount, 1)) * 100));
                   return (
                     <div key={g.id} className="p-4 rounded-xl bg-slate-950 border border-slate-800/80 space-y-2">
                       <div className="flex justify-between text-sm font-semibold">
-                        <span>{g.name || g.title || "Financial Goal"}</span>
-                        <span className="text-indigo-300">Target: {g.target_date || g.deadline || "2027-06-01"}</span>
+                        <span>{g.name}</span>
+                        <span className="text-indigo-300">Target: {g.target_date}</span>
                       </div>
                       <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
                         <div className="bg-indigo-500 h-full" style={{ width: `${pct}%` }} />
                       </div>
                       <div className="flex justify-between text-xs text-slate-400">
-                        <span>Saved: ₹{(((g.saved_amount ?? g.current_amount ?? 0) ?? g.current_amount ?? 0) ?? 0).toLocaleString("en-IN")} ({pct}%)</span>
-                        <span>Goal: ₹{(((g.target_amount ?? 0) ?? 0) ?? 0).toLocaleString("en-IN")}</span>
+                        <span>Saved: ₹{(savedAmount ?? 0).toLocaleString("en-IN")} ({pct}%)</span>
+                        <span>Goal: ₹{(targetAmount ?? 0).toLocaleString("en-IN")}</span>
                       </div>
                     </div>
                   );
@@ -366,7 +407,7 @@ export default function ArthaTwinDashboard() {
                         <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} />
                         <Tooltip contentStyle={{ backgroundColor: "#0f172a", borderColor: "#334155" }} />
                         <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                          {data.category_breakdown.map((_: any, i: number) => (
+                          {data.category_breakdown.map((_, i) => (
                             <Cell key={i} fill={COLORS[i % COLORS.length]} />
                           ))}
                         </Bar>
@@ -389,7 +430,7 @@ export default function ArthaTwinDashboard() {
                   {data.recurring_alerts.length === 0 && (
                     <p className="text-sm text-slate-400">Click &quot;Load Sample Indian Bank Data&quot; to detect recurring patterns.</p>
                   )}
-                  {data.recurring_alerts.map((sub: any, idx: number) => (
+                  {data.recurring_alerts.map((sub, idx) => (
                     <div
                       key={idx}
                       className={`p-4 rounded-xl border ${
@@ -409,7 +450,7 @@ export default function ArthaTwinDashboard() {
                       <p className="text-xs text-slate-300 mt-1.5">{sub.reason}</p>
                       <div className="mt-3 flex items-center gap-2 text-xs">
                         <span className="text-slate-400">Still use this?</span>
-                        {["yes", "no", "unsure"].map((opt) => (
+                        {SUBSCRIPTION_OPTIONS.map((opt) => (
                           <button
                             key={opt}
                             onClick={() => handleSubFeedback(sub.merchant, opt)}
@@ -436,14 +477,21 @@ export default function ArthaTwinDashboard() {
             <div className="w-full max-w-xl rounded-2xl border border-slate-700 bg-slate-900 p-6 space-y-4">
               <div className="flex justify-between items-center"><h2 className="text-lg font-bold">Edit Profile &amp; Goals</h2><button onClick={() => setProfileOpen(false)} aria-label="Close">✕</button></div>
               <div className="grid grid-cols-2 gap-3">
-                {[["Monthly income", "monthly_income"], ["Fixed monthly costs", "fixed_costs"], ["Emergency fund saved", "emergency_fund_current"], ["Emergency fund target", "emergency_fund_target"], ["Discretionary budget", "discretionary_budget"]].map(([label, key]) => (
+                {PROFILE_FIELDS.map(({ label, key }) => (
                   <label key={key} className="text-xs text-slate-400">{label}<input type="number" value={profileDraft[key] ?? 0} onChange={(e) => setProfileDraft({ ...profileDraft, [key]: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" /></label>
                 ))}
               </div>
               <h3 className="text-sm font-semibold text-slate-200">Primary goal</h3>
               <div className="flex gap-2">
-                <select value={goalDraft.id ?? "new"} onChange={(e) => setGoalDraft(e.target.value === "new" ? { name: "", target_amount: 0, saved_amount: 0, target_date: "", priority: 1 } : { ...data.goals.find((goal: any) => goal.id === Number(e.target.value)) })} className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
-                  {data.goals.map((goal: any) => <option key={goal.id} value={goal.id}>{goal.name}</option>)}
+                <select value={goalDraft.id ?? "new"} onChange={(e) => {
+                  if (e.target.value === "new") {
+                    setGoalDraft({ name: "", target_amount: 0, saved_amount: 0, target_date: "", priority: 1 });
+                  } else {
+                    const selected = data.goals.find((goal) => goal.id === Number(e.target.value));
+                    if (selected) setGoalDraft({ ...selected });
+                  }
+                }} className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
+                  {data.goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.name}</option>)}
                   <option value="new">Add a goal…</option>
                 </select>
               </div>
@@ -509,7 +557,7 @@ export default function ArthaTwinDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800">
-                      {data.transactions.map((t: any) => (
+                      {data.transactions.map((t) => (
                         <tr key={t.id} className="hover:bg-slate-800/40">
                           <td className="p-3 whitespace-nowrap">
                             <div className="font-medium text-slate-200">{t.date}</div>
@@ -575,7 +623,7 @@ export default function ArthaTwinDashboard() {
                 </div>
               ) : (
                 <div className="space-y-2.5">
-                  {data.learned_rules.map((r: any) => (
+                  {data.learned_rules.map((r) => (
                     <div key={r.id} className="p-3 rounded-xl bg-slate-950 border border-emerald-500/30 space-y-1">
                       <div className="flex justify-between items-center">
                         <span className="text-xs font-bold text-emerald-300">MATCH: &quot;{r.pattern}&quot;</span>
@@ -678,19 +726,21 @@ export default function ArthaTwinDashboard() {
 
               <div className="space-y-3">
                 <h3 className="text-xs font-bold uppercase text-slate-400">Goal Timeline Impact (&quot;Time-Tax&quot; Delta)</h3>
-                {simResult.goal_impacts.map((g: any, idx: number) => (
-                  <div key={idx} className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                {simResult.goal_impacts.map((g, idx) => {
+                  const hasTimeline = g.days_saved !== null;
+                  const daysSaved = g.days_saved ?? 0;
+                  return <div key={idx} className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
                     <div>
                       <div className="font-bold text-sm text-white">{g.goal_name}</div>
                       <div className="text-xs text-slate-400 mt-0.5">
-                        New Projected Completion: <span className="text-indigo-300 font-semibold">{g.projected_completion}</span> ({g.new_months} mos)
+                        New Projected Completion: <span className="text-indigo-300 font-semibold">{g.projected_completion ?? "Unavailable"}</span> ({g.new_months ?? "—"} mos)
                       </div>
                     </div>
-                    <div className={`text-xs font-bold px-3 py-1.5 rounded-lg ${g.days_saved >= 0 ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>
-                      {g.days_saved >= 0 ? `${g.days_saved} days faster` : `${Math.abs(g.days_saved)} days delayed`}
+                    <div className={`text-xs font-bold px-3 py-1.5 rounded-lg ${hasTimeline ? daysSaved >= 0 ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300" : "bg-slate-800 text-slate-400"}`}>
+                      {!hasTimeline ? "Timeline unavailable" : daysSaved >= 0 ? `${daysSaved} days faster` : `${Math.abs(daysSaved)} days delayed`}
                     </div>
-                  </div>
-                ))}
+                  </div>;
+                })}
               </div>
               <p className="text-[11px] text-slate-500">{simResult.assumptions}</p>
             </div>
@@ -785,7 +835,7 @@ export default function ArthaTwinDashboard() {
             <div className="space-y-2">
               <h3 className="text-sm font-bold text-white">1. Top Spending Leaks & Anomalies Detected</h3>
               <ul className="list-disc pl-5 text-sm text-slate-300 space-y-1">
-                {data.recurring_alerts.map((a: any, i: number) => (
+                {data.recurring_alerts.map((a, i) => (
                   <li key={i}><strong>{a.merchant}:</strong> {a.reason}</li>
                 ))}
               </ul>
@@ -795,7 +845,7 @@ export default function ArthaTwinDashboard() {
               <h3 className="text-sm font-bold text-white">2. Rule-Learning Memory Updates</h3>
               <p className="text-sm text-slate-300">
                 {data.learned_rules.length > 0
-                  ? `Active custom rules learned from your corrections: ${data.learned_rules.map((r: any) => `${r.pattern} → ${r.category}`).join(", ")}.`
+                  ? `Active custom rules learned from your corrections: ${data.learned_rules.map((r) => `${r.pattern} → ${r.category}`).join(", ")}.`
                   : "All transactions categorized via deterministic merchant rules and P2P filters."}
               </p>
             </div>
