@@ -10,7 +10,7 @@ import {
 } from "recharts";
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "https://arthatwin-living-money-model.onrender.com/api").replace(/\/$/, "");
-const API = API_BASE.endsWith("/api") ? API_BASE : `${API_BASE}/api`;
+const API = process.env.NEXT_PUBLIC_API_URL || "https://arthatwin-living-money-model.onrender.com/api";
 const PUBLIC_DEMO = process.env.NEXT_PUBLIC_ARTHATWIN_PUBLIC_DEMO === "1";
 
 const CATEGORIES = [
