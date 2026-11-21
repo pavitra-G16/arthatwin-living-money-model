@@ -678,8 +678,8 @@ export default function ArthaTwinDashboard() {
               <div className="rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden">
                 <div className="p-4 border-b border-slate-800 flex justify-between items-center">
                   <div>
-                    <h2 className="text-sm font-bold text-white">Transaction Ledger (Click Category to Teach Rule)</h2>
-                    <p className="text-xs text-slate-400">Try changing SWIGGY INSTAMART from Dining Out → Groceries to trigger live rule learning.</p>
+                    <h2 className="text-sm font-bold text-white">Transaction Ledger</h2>
+                    <p className="text-xs text-slate-400">To teach a rule, correct a transaction only when its category is wrong. Confirm the matching-row prompt; the saved rule and count will update. The sample Instamart rows are already Groceries, so they will not create a new rule.</p>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -755,8 +755,10 @@ export default function ArthaTwinDashboard() {
                 Corrections create deterministic merchant rules with higher precedence than defaults. This rule memory is not an LLM.
               </p>
               {data.learned_rules.length === 0 ? (
-                <div className="p-4 rounded-xl bg-slate-950 border border-dashed border-slate-800 text-xs text-slate-400">
-                  No custom rules learned yet. Change any transaction category on the left to watch the system learn!
+                <div className="p-4 rounded-xl bg-slate-950 border border-dashed border-slate-800 space-y-2">
+                  <p className="text-sm font-semibold text-slate-200">No user corrections saved yet</p>
+                  <p className="text-xs leading-relaxed text-slate-400">That is why the dashboard shows 0 Rules. Find a transaction on the left whose category is genuinely wrong, choose its correct category, then confirm the matching-row prompt. The count increases only after the rule is saved.</p>
+                  <p className="text-[11px] leading-relaxed text-slate-500">If the sample categories are already right, leave them unchanged. A saved rule will appear here and future matching previews will be marked LEARNED_RULE.</p>
                 </div>
               ) : (
                 <div className="space-y-2.5">
