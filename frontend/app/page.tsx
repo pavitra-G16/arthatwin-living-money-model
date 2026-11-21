@@ -23,6 +23,9 @@ export default function ArthaTwinDashboard() {
   const [activeTab, setActiveTab] = useState<"overview" | "ledger" | "simulator" | "coach" | "report">("overview");
   const [loading, setLoading] = useState(false);
   const [agentTrace, setAgentTrace] = useState<any>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileDraft, setProfileDraft] = useState<any>(null);
+  const [goalDraft, setGoalDraft] = useState<any>(null);
 
   // Ingestion states
   const [smsText, setSmsText] = useState("");
@@ -87,6 +90,20 @@ export default function ArthaTwinDashboard() {
       summary: "Ingested 16 messy Indian transactions across PDF, CSV, and SMS. Quarantined 1 prompt-injection narration and flagged 2 recurring subscription anomalies."
     });
     setLoading(false);
+  };
+
+  const openProfileEditor = () => {
+    setProfileDraft({ ...data.profile });
+    setGoalDraft(data.goals[0] ? { ...data.goals[0] } : { name: "New goal", target_amount: 100000, saved_amount: 0, target_date: "2027-12-31", priority: 1 });
+    setProfileOpen(true);
+  };
+
+  const saveProfileAndGoal = async () => {
+    await fetch(`${API}/profile`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(profileDraft) });
+    await fetch(`${API}/goals`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(goalDraft) });
+    setProfileOpen(false);
+    await fetchDashboard();
+    await runSimulation();
   };
 
   const handleCategoryFix = async (txnId: number, newCategory: string) => {
@@ -247,6 +264,9 @@ export default function ArthaTwinDashboard() {
         {/* TAB 1: LIVING OVERVIEW */}
         {activeTab === "overview" && (
           <div className="space-y-6">
+            <div className="flex justify-end">
+              <button onClick={openProfileEditor} className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm font-medium">Edit Profile &amp; Goals</button>
+            </div>
             {/* Proactive Drift Nudges */}
             {data.nudges.map((n: any, idx: number) => (
               <div key={idx} className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
@@ -272,26 +292,26 @@ export default function ArthaTwinDashboard() {
               <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
                 <div className="text-xs text-slate-400 uppercase font-semibold">Monthly Income vs Outflow</div>
                 <div className="mt-2 text-2xl font-bold text-white">
-                  ₹{data.profile.monthly_income.toLocaleString("en-IN")}
+                  ₹{(data.profile.monthly_income ?? 0).toLocaleString("en-IN")}
                 </div>
                 <p className="text-xs text-rose-400 mt-2">
-                  Tracked Outflow: ₹{Math.round(data.total_spent).toLocaleString("en-IN")}
+                  Tracked Outflow: ₹{Math.round(data.total_spent ?? 0).toLocaleString("en-IN")}
                 </p>
               </div>
 
               <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
                 <div className="text-xs text-slate-400 uppercase font-semibold">Emergency Runway Buffer</div>
                 <div className="mt-2 text-2xl font-bold text-cyan-400">
-                  ₹{data.profile.emergency_fund_current.toLocaleString("en-IN")}
+                  ₹{(data.profile.emergency_fund_current ?? 0).toLocaleString("en-IN")}
                 </div>
                 <div className="w-full bg-slate-800 h-2 rounded-full mt-2.5 overflow-hidden">
                   <div
                     className="bg-cyan-400 h-full"
-                    style={{ width: `${Math.min(100, (data.profile.emergency_fund_current / data.profile.emergency_fund_target) * 100)}%` }}
+                    style={{ width: `${Math.min(100, ((data.profile.emergency_fund_current ?? 0) / Math.max(data.profile.emergency_fund_target ?? 0, 1)) * 100)}%` }}
                   />
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  Target: ₹{data.profile.emergency_fund_target.toLocaleString("en-IN")}
+                  Target: ₹{(data.profile.emergency_fund_target ?? 0).toLocaleString("en-IN")}
                 </p>
               </div>
 
@@ -318,19 +338,19 @@ export default function ArthaTwinDashboard() {
                   </button>
                 </div>
                 {data.goals.map((g: any) => {
-                  const pct = Math.min(100, Math.round((g.saved_amount / g.target_amount) * 100));
+                  const pct = Math.min(100, Math.round((((g.saved_amount ?? g.current_amount ?? 0) ?? 0) / Math.max((g.target_amount ?? 0) ?? 0, 1)) * 100));
                   return (
                     <div key={g.id} className="p-4 rounded-xl bg-slate-950 border border-slate-800/80 space-y-2">
                       <div className="flex justify-between text-sm font-semibold">
-                        <span>{g.name}</span>
-                        <span className="text-indigo-300">Target: {g.target_date}</span>
+                        <span>{g.name || g.title || "Financial Goal"}</span>
+                        <span className="text-indigo-300">Target: {g.target_date || g.deadline || "2027-06-01"}</span>
                       </div>
                       <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
                         <div className="bg-indigo-500 h-full" style={{ width: `${pct}%` }} />
                       </div>
                       <div className="flex justify-between text-xs text-slate-400">
-                        <span>Saved: ₹{g.saved_amount.toLocaleString("en-IN")} ({pct}%)</span>
-                        <span>Goal: ₹{g.target_amount.toLocaleString("en-IN")}</span>
+                        <span>Saved: ₹{((g.saved_amount ?? g.current_amount ?? 0) ?? 0).toLocaleString("en-IN")} ({pct}%)</span>
+                        <span>Goal: ₹{((g.target_amount ?? 0) ?? 0).toLocaleString("en-IN")}</span>
                       </div>
                     </div>
                   );
@@ -383,7 +403,7 @@ export default function ArthaTwinDashboard() {
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-sm text-white">{sub.merchant}</span>
                         <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-200">
-                          ₹{sub.monthly_amount}/mo (₹{sub.annual_cost.toLocaleString("en-IN")}/yr)
+                          ₹{sub.monthly_amount}/mo (₹{(sub.annual_cost ?? 0).toLocaleString("en-IN")}/yr)
                         </span>
                       </div>
                       <p className="text-xs text-slate-300 mt-1.5">{sub.reason}</p>
@@ -407,6 +427,33 @@ export default function ArthaTwinDashboard() {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {profileOpen && profileDraft && goalDraft && (
+          <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Edit profile and goal">
+            <div className="w-full max-w-xl rounded-2xl border border-slate-700 bg-slate-900 p-6 space-y-4">
+              <div className="flex justify-between items-center"><h2 className="text-lg font-bold">Edit Profile &amp; Goals</h2><button onClick={() => setProfileOpen(false)} aria-label="Close">✕</button></div>
+              <div className="grid grid-cols-2 gap-3">
+                {[["Monthly income", "monthly_income"], ["Fixed monthly costs", "fixed_costs"], ["Emergency fund saved", "emergency_fund_current"], ["Emergency fund target", "emergency_fund_target"], ["Discretionary budget", "discretionary_budget"]].map(([label, key]) => (
+                  <label key={key} className="text-xs text-slate-400">{label}<input type="number" value={profileDraft[key] ?? 0} onChange={(e) => setProfileDraft({ ...profileDraft, [key]: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" /></label>
+                ))}
+              </div>
+              <h3 className="text-sm font-semibold text-slate-200">Primary goal</h3>
+              <div className="flex gap-2">
+                <select value={goalDraft.id ?? "new"} onChange={(e) => setGoalDraft(e.target.value === "new" ? { name: "", target_amount: 0, saved_amount: 0, target_date: "", priority: 1 } : { ...data.goals.find((goal: any) => goal.id === Number(e.target.value)) })} className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
+                  {data.goals.map((goal: any) => <option key={goal.id} value={goal.id}>{goal.name}</option>)}
+                  <option value="new">Add a goal…</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs text-slate-400 col-span-2">Goal name<input value={goalDraft.name ?? ""} onChange={(e) => setGoalDraft({ ...goalDraft, name: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" /></label>
+                <label className="text-xs text-slate-400">Target amount<input type="number" value={goalDraft.target_amount ?? 0} onChange={(e) => setGoalDraft({ ...goalDraft, target_amount: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" /></label>
+                <label className="text-xs text-slate-400">Saved so far<input type="number" value={goalDraft.saved_amount ?? 0} onChange={(e) => setGoalDraft({ ...goalDraft, saved_amount: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" /></label>
+                <label className="text-xs text-slate-400">Target date<input type="date" value={goalDraft.target_date ?? ""} onChange={(e) => setGoalDraft({ ...goalDraft, target_date: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" /></label>
+              </div>
+              <div className="flex justify-end gap-2"><button onClick={() => setProfileOpen(false)} className="px-3 py-2 rounded-lg bg-slate-800">Cancel</button><button onClick={saveProfileAndGoal} className="px-3 py-2 rounded-lg bg-indigo-600 font-semibold">Save changes</button></div>
             </div>
           </div>
         )}
@@ -481,7 +528,7 @@ export default function ArthaTwinDashboard() {
                             )}
                           </td>
                           <td className={`p-3 font-bold whitespace-nowrap ${t.txn_type === "CREDIT" ? "text-emerald-400" : "text-slate-100"}`}>
-                            {t.txn_type === "CREDIT" ? "+" : "-"}₹{t.amount.toLocaleString("en-IN")}
+                            {t.txn_type === "CREDIT" ? "+" : "-"}₹{(t.amount ?? 0).toLocaleString("en-IN")}
                           </td>
                           <td className="p-3">
                             <select
@@ -573,7 +620,7 @@ export default function ArthaTwinDashboard() {
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span>Rent Increase / Housing Shift</span>
-                    <span className="font-bold text-rose-400">+₹{rentChange.toLocaleString("en-IN")}/mo</span>
+                    <span className="font-bold text-rose-400">+₹{(rentChange ?? 0).toLocaleString("en-IN")}/mo</span>
                   </div>
                   <input
                     type="range" min={0} max={15000} step={1000} value={rentChange}
@@ -589,7 +636,7 @@ export default function ArthaTwinDashboard() {
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span>Extra Freelance / Side Income</span>
-                    <span className="font-bold text-cyan-400">+₹{extraIncome.toLocaleString("en-IN")}/mo</span>
+                    <span className="font-bold text-cyan-400">+₹{(extraIncome ?? 0).toLocaleString("en-IN")}/mo</span>
                   </div>
                   <input
                     type="range" min={0} max={30000} step={2500} value={extraIncome}
@@ -621,11 +668,11 @@ export default function ArthaTwinDashboard() {
                 <div>
                   <div className="text-xs text-slate-400">Simulated Monthly Surplus</div>
                   <div className="text-2xl font-extrabold text-white">
-                    ₹{simResult.simulated_monthly_surplus.toLocaleString("en-IN")}/mo
+                    ₹{(simResult.simulated_monthly_surplus ?? 0).toLocaleString("en-IN")}/mo
                   </div>
                 </div>
                 <div className={`text-sm font-bold px-3 py-1 rounded-full ${simResult.monthly_delta >= 0 ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"}`}>
-                  {simResult.monthly_delta >= 0 ? "+" : ""}₹{simResult.monthly_delta.toLocaleString("en-IN")}/mo vs baseline
+                  {simResult.monthly_delta >= 0 ? "+" : ""}₹{(simResult.monthly_delta ?? 0).toLocaleString("en-IN")}/mo vs baseline
                 </div>
               </div>
 
@@ -723,11 +770,11 @@ export default function ArthaTwinDashboard() {
             <div className="grid grid-cols-3 gap-4">
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
                 <div className="text-xs text-slate-400">Net Monthly Income</div>
-                <div className="text-xl font-bold text-emerald-400 mt-1">₹{data.profile.monthly_income.toLocaleString("en-IN")}</div>
+                <div className="text-xl font-bold text-emerald-400 mt-1">₹{(data.profile.monthly_income ?? 0).toLocaleString("en-IN")}</div>
               </div>
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
                 <div className="text-xs text-slate-400">Verified Expenses</div>
-                <div className="text-xl font-bold text-rose-400 mt-1">₹{Math.round(data.total_spent).toLocaleString("en-IN")}</div>
+                <div className="text-xl font-bold text-rose-400 mt-1">₹{Math.round(data.total_spent ?? 0).toLocaleString("en-IN")}</div>
               </div>
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
                 <div className="text-xs text-slate-400">Living Health Score</div>
