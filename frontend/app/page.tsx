@@ -338,7 +338,7 @@ export default function ArthaTwinDashboard() {
                   </button>
                 </div>
                 {data.goals.map((g: any) => {
-                  const pct = Math.min(100, Math.round((((g.saved_amount ?? g.current_amount ?? 0) ?? 0) / Math.max((g.target_amount ?? 0) ?? 0, 1)) * 100));
+                  const pct = Math.min(100, Math.round(((((g.saved_amount ?? g.current_amount ?? 0) ?? g.current_amount ?? 0) ?? 0) / Math.max(((g.target_amount ?? 0) ?? 0) ?? 0, 1)) * 100));
                   return (
                     <div key={g.id} className="p-4 rounded-xl bg-slate-950 border border-slate-800/80 space-y-2">
                       <div className="flex justify-between text-sm font-semibold">
@@ -349,8 +349,8 @@ export default function ArthaTwinDashboard() {
                         <div className="bg-indigo-500 h-full" style={{ width: `${pct}%` }} />
                       </div>
                       <div className="flex justify-between text-xs text-slate-400">
-                        <span>Saved: ₹{((g.saved_amount ?? g.current_amount ?? 0) ?? 0).toLocaleString("en-IN")} ({pct}%)</span>
-                        <span>Goal: ₹{((g.target_amount ?? 0) ?? 0).toLocaleString("en-IN")}</span>
+                        <span>Saved: ₹{(((g.saved_amount ?? g.current_amount ?? 0) ?? g.current_amount ?? 0) ?? 0).toLocaleString("en-IN")} ({pct}%)</span>
+                        <span>Goal: ₹{(((g.target_amount ?? 0) ?? 0) ?? 0).toLocaleString("en-IN")}</span>
                       </div>
                     </div>
                   );
