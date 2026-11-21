@@ -124,40 +124,35 @@ svg {
   font-family: var(--font-geist-sans), Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
-/* A light orbital field gives the landing card depth without shipping a 3D runtime. */
-main[class~="bg-gradient-to-br"] > section > div:last-child {
+.money-twin-hero {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%), 0 28px 80px rgb(2 6 23 / 48%);
+  background:
+    radial-gradient(ellipse at 90% 0%, rgb(79 70 229 / 17%), transparent 48%),
+    linear-gradient(135deg, rgb(15 23 42 / 94%), rgb(8 12 27 / 98%) 65%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%), 0 28px 80px rgb(2 6 23 / 38%);
 }
 
-main[class~="bg-gradient-to-br"] > section > div:last-child::before {
-  content: "";
+.money-hero-orbit {
   position: absolute;
   z-index: -1;
-  inset: -55%;
+  inset: -65%;
   pointer-events: none;
-  opacity: 0.34;
-  background: repeating-radial-gradient(
-    ellipse at 68% 35%,
-    transparent 0 24px,
-    rgb(129 140 248 / 25%) 25px,
-    transparent 26px 46px
-  );
-  mask-image: radial-gradient(ellipse at 68% 35%, #000 0, transparent 66%);
-  animation: orbit-drift 34s linear infinite;
+  opacity: 0.35;
+  background: repeating-radial-gradient(ellipse at 74% 45%, transparent 0 30px, rgb(129 140 248 / 18%) 31px, transparent 32px 57px);
+  mask-image: radial-gradient(ellipse at 74% 45%, #000 0, transparent 66%);
+  animation: orbit-drift 48s linear infinite;
 }
 
-main[class~="bg-gradient-to-br"] > section > div:last-child > div > div {
-  transition: transform 220ms ease, border-color 220ms ease, background-color 220ms ease;
+.money-spend-ring {
+  background: conic-gradient(from -90deg, #60a5fa 0deg, #22d3ee var(--spend-angle), rgb(30 41 59 / 95%) var(--spend-angle), rgb(30 41 59 / 95%) 360deg);
+  box-shadow: 0 0 40px rgb(34 211 238 / 12%), 0 0 90px rgb(99 102 241 / 12%);
+  transition: background 300ms ease, box-shadow 300ms ease;
 }
 
-main[class~="bg-gradient-to-br"] > section > div:last-child > div > div:hover {
-  transform: translateY(-3px);
-  border-color: rgb(129 140 248 / 28%);
-  background-color: rgb(15 23 42 / 85%);
-}
+.money-hero-metric { transition: transform 180ms ease; }
+.money-hero-metric:hover { transform: translateX(3px); }
 
 @keyframes orbit-drift {
   from { transform: rotate(0deg) scale(1); }
@@ -186,6 +181,7 @@ main[class~="bg-gradient-to-br"] > section > div:last-child > div > div:hover {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
+  .money-spend-ring { transition: none; }
 }
 
 @media print {

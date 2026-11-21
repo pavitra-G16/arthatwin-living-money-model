@@ -203,6 +203,90 @@ def test_sms_preview_confirm_and_profile_goal_persist_between_requests():
         engine.dispose()
 
 
+def test_data_exports_include_saved_records_and_coach_external_ai_requires_request_opt_in(monkeypatch):
+    from main import coach_response as route_coach_response
+    client, factory, engine = _test_client()
+    monkeypatch.delenv("ARTHATWIN_PUBLIC_DEMO", raising=False)
+    calls = []
+
+    def fake_coach(db, message, month, allow_external_ai=False):
+        calls.append((message, month, allow_external_ai))
+        return {"reply": "ok", "guardrail_triggered": False}
+
+    monkeypatch.setattr("main.coach_response", fake_coach)
+    try:
+        with factory() as db:
+            db.add(FinancialProfile(monthly_income=Decimal("40000"), fixed_costs=Decimal("10000")))
+            db.add(Transaction(date="2026-11-02", raw_narration="UPI CAFE", merchant="CAFE", amount=Decimal("200.00"), txn_type="DEBIT", category="Dining Out", source="CSV", fingerprint="export-row"))
+            db.commit()
+        csv_response = client.get("/api/transactions/export.csv")
+        assert csv_response.status_code == 200
+        assert "CAFE" in csv_response.text and "200.00" in csv_response.text
+        json_response = client.get("/api/data/export.json")
+        assert json_response.status_code == 200
+        assert json_response.json()["profile"]["monthly_income"] == 40000
+        assert json_response.json()["transactions"][0]["merchant"] == "CAFE"
+
+        assert client.post("/api/coach", json={"message": "How much did I spend?", "month": "2026-11"}).status_code == 200
+        assert calls[-1] == ("How much did I spend?", "2026-11", False)
+        assert client.post("/api/coach", json={"message": "How much did I spend?", "month": "2026-11", "allow_external_ai": True}).status_code == 200
+        assert calls[-1] == ("How much did I spend?", "2026-11", True)
+    finally:
+        monkeypatch.setattr("main.coach_response", route_coach_response)
+        app.dependency_overrides.clear()
+        engine.dispose()
+
+
+def test_learned_category_rule_survives_file_database_reopen_and_matches_future_import(tmp_path):
+    database_file = tmp_path / "arthatwin-restart-test.sqlite"
+    database_url = f"sqlite:///{database_file}"
+
+    def install_database(url):
+        engine = create_engine(url, connect_args={"check_same_thread": False})
+        Base.metadata.create_all(engine)
+        factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+
+        def override_db():
+            db = factory()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app.dependency_overrides[get_db] = override_db
+        return engine, factory
+
+    first_engine, first_factory = install_database(database_url)
+    try:
+        with first_factory() as db:
+            db.add(FinancialProfile())
+            db.add(Transaction(date="2026-11-03", raw_narration="UPI/773829/DR/ZOMATO ORDER/ICICI", merchant="ZOMATO ORDER", amount=Decimal("840.00"), txn_type="DEBIT", category="Review Required", source="CSV", fingerprint="restart-rule-source"))
+            db.commit()
+            transaction_id = db.query(Transaction).filter_by(fingerprint="restart-rule-source").one().id
+        corrected = TestClient(app).post(f"/api/transactions/{transaction_id}/correct", json={"new_category": "Dining Out"})
+        assert corrected.status_code == 200
+        assert corrected.json()["agent_trace"]["event"] == "USER_RULE_SAVED"
+    finally:
+        app.dependency_overrides.clear()
+        first_engine.dispose()
+
+    second_engine, second_factory = install_database(database_url)
+    try:
+        with second_factory() as db:
+            rule = db.query(LearnedRule).filter_by(pattern="ZOMATO ORDER").one()
+            assert rule.category == "Dining Out" and rule.is_enabled
+        future = TestClient(app).post("/api/ingest/sms/preview", json={
+            "sms_text": "UPI/991122/DR/ZOMATO ORDER/ICICI Rs. 260 debited on 15-11-2026"
+        })
+        assert future.status_code == 200
+        row = future.json()["transactions"][0]
+        assert row["suggested_category"] == "Dining Out"
+        assert row["categorization_source"] == "LEARNED_RULE"
+    finally:
+        app.dependency_overrides.clear()
+        second_engine.dispose()
+
+
 def test_coverage_is_required_before_drift_nudges_and_report_is_month_scoped():
     from engine import _external_coach_tool_result
     client, factory, engine = _test_client()
@@ -258,6 +342,7 @@ def test_public_demo_blocks_personal_writes_and_filters_private_rows(monkeypatch
 
 
 def test_guardrail_and_external_ai_off_by_default(monkeypatch):
+    import engine as engine_module
     from engine import coach_response
     client, factory, engine = _test_client()
     monkeypatch.delenv("EXTERNAL_AI_ENABLED", raising=False)
@@ -270,6 +355,12 @@ def test_guardrail_and_external_ai_off_by_default(monkeypatch):
             ordinary = coach_response(db, "How much did I spend?", allow_external_ai=True)
             assert ordinary["agent_trace"]["tool_selected"] == "get_monthly_summary"
             assert ordinary["agent_trace"]["ai_enabled"] is False
+            monkeypatch.setenv("EXTERNAL_AI_ENABLED", "1")
+            monkeypatch.setenv("GEMINI_API_KEY", "fake-test-only-key")
+            monkeypatch.setattr(engine_module, "_optional_external_coach", lambda *args, **kwargs: None)
+            fallback = coach_response(db, "How much did I spend?", allow_external_ai=True)
+            assert fallback["agent_trace"]["tool_selected"] == "get_monthly_summary"
+            assert fallback["agent_trace"]["ai_enabled"] is False
     finally:
         app.dependency_overrides.clear()
         engine.dispose()

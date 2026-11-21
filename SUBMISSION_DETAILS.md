@@ -35,6 +35,10 @@ Verified live on 2026-11-21: commit `4c19a37` is deployed to both Render service
 
 Next.js 16 / React 19 frontend → FastAPI API → SQLAlchemy persistence. CSV, SMS, and text-PDF importers normalize transaction records. A deterministic finance engine calculates period totals, recurring evidence, goal scenarios, and reports using INR decimal amounts. Optional Gemini tool calling is configured separately, bounded to read-only context, and requires user consent.
 
+## AI integration statement for submission
+
+ArthaTwin's optional external provider is Google Gemini (`gemini-2.5-flash` by default when configured). For a single consented coach question, the provider receives the question and selected month, then selects one of seven zero-argument read-only tools. The backend executes the selected calculation locally and creates the user-facing explanation deterministically from its verified result. Profile records, transactions, raw narration, and tool results are not sent to Gemini. The default coach, merchant categorization, correction memory, recurring detection, and goal simulations are deterministic code; they should not be described as LLM-generated. Tests use a fake SDK response; no live Gemini call was made. Gemini is not configured on the active Render backend, so the live coach uses deterministic fallback.
+
 ## LinkedIn launch post (draft)
 
 Meet **ArthaTwin — Your Living Money Model**, our hackathon prototype for making everyday cashflow easier to understand.

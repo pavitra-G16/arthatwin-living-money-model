@@ -11,7 +11,7 @@ Indian bank data arrives as CSV rows, statement PDFs, and SMS text with noisy UP
 - Next.js 16 and React 19 user interface.
 - FastAPI and SQLAlchemy service with Decimal-based INR arithmetic.
 - SQLite in the current Render setup; optional PostgreSQL support exists in configuration.
-- Optional Gemini function calling is off unless configured and explicitly consented to; deterministic responses remain available.
+- Optional Google Gemini tool selection defaults off and requires server-side `EXTERNAL_AI_ENABLED=1`, a provider API key, and one-question consent. The provider sees the question and selected month only; selected read-only tools execute locally and local deterministic code writes the answer from verified outputs. Disabled, unavailable, or invalid tool selection falls back to deterministic coaching. Merchant learning and financial simulations are rules/math, not LLM features.
 
 ## Current demo
 
@@ -24,6 +24,8 @@ Indian bank data arrives as CSV rows, statement PDFs, and SMS text with noisy UP
 - UPI merchant phrases now take priority over generic transfer-narration detection. The synthetic examples map Instamart to Groceries, Starbucks/Zomato to Dining Out, NoBroker rent to Housing, Airtel Fiber to Utilities, and Rahul Sharma to Transfers / People.
 - On startup with synthetic seeding enabled, the backend re-evaluates only unlocked, non-learned synthetic categories. It preserves manually locked and user-learned labels and does not touch non-demo records.
 - The what-if view now shows baseline surplus, simulated surplus, and monthly delta side by side. Recurring candidates show inferred cadence, observation count, and qualitative confidence. Print styling scopes output to the monthly report.
+- The overview now features an animated, reduced-motion-aware outflow ring computed from observed income and expenses, plus actual imported/modelled figures. No decorative sample amounts are used in the visualization.
+- External AI consent now resets after each coach question; navigation and rule-memory labels distinguish deterministic rules from an LLM.
 - The sample has 16 rows total across two months; 14 belong to November. Exact totals and the dining/rent scenarios are documented in [FEATURES_AND_REQUIREMENTS.md](FEATURES_AND_REQUIREMENTS.md).
 - Commit `4c19a37` is live on both Render services. The live frontend dashboard and direct backend dashboard API agree on November totals: ₹85,000 income, ₹34,006 expenses after refunds, ₹50,994 observed net savings, and ₹44,172 modeled surplus.
 
@@ -34,6 +36,7 @@ Indian bank data arrives as CSV rows, statement PDFs, and SMS text with noisy UP
 - Text-based PDF parsing is supported; scanned PDF OCR is not.
 - No live bank integrations or transaction execution.
 - Gemini is optional and was not called during verification.
-- Browser print/PDF output, responsive layouts, and full hosted import-to-report journeys have not been verified. Cross-redeploy persistence is not guaranteed on ephemeral SQLite.
+- Tests exercise a simulated Gemini SDK tool-selection response, validate that prompt inputs exclude account data and narration, enforce request opt-in, and cover deterministic fallback when external AI is off. No real provider request was sent.
+- Browser print/PDF output and full hosted import-to-report journeys have not been verified. One 390 px viewport was visually checked; broader device coverage remains outstanding. Cross-redeploy persistence is not guaranteed on ephemeral SQLite.
 
 See [FEATURES_AND_REQUIREMENTS.md](FEATURES_AND_REQUIREMENTS.md), [TEST_REPORT.md](TEST_REPORT.md), [DEPLOYMENT_REPORT.md](DEPLOYMENT_REPORT.md), and [SECURITY.md](SECURITY.md) for evidence and caveats.

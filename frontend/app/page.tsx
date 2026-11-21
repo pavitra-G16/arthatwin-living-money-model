@@ -241,12 +241,15 @@ export default function ArthaTwinDashboard() {
   const handleSendChat = async (customPrompt?: string) => {
     const query = customPrompt || chatInput;
     if (!query.trim()) return;
+    const externalAiConsentForThisQuestion = allowExternalAi;
+    // Consent applies to this question only, even if the request fails or is guardrailed.
+    setAllowExternalAi(false);
     setMessages((prev) => [...prev, { role: "user", text: query }]);
     setChatInput("");
     const res = await fetch(`${API}/coach`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: query, month: selectedMonth || undefined, allow_external_ai: allowExternalAi })
+      body: JSON.stringify({ message: query, month: selectedMonth || undefined, allow_external_ai: externalAiConsentForThisQuestion })
     });
     const json = await res.json() as { reply: string; guardrail_triggered: boolean; agent_trace?: AgentTrace };
     if (json.agent_trace) setAgentTrace(json.agent_trace);
@@ -280,6 +283,11 @@ export default function ArthaTwinDashboard() {
       </div>
     );
   }
+
+  const observedIncome = Number(data.summary.observed_income ?? 0);
+  const observedOutflowPercent = observedIncome > 0
+    ? Math.round(Number(data.total_spent ?? 0) / observedIncome * 100)
+    : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
@@ -318,7 +326,7 @@ export default function ArthaTwinDashboard() {
         <div className="max-w-7xl mx-auto px-4 flex gap-1 overflow-x-auto border-t border-slate-800/60">
           {[
             { id: "overview", label: "Living Overview", icon: TrendingUp },
-            { id: "ledger", label: `Transactions & AI Brain (${data.learned_rules.length} Rules)`, icon: Brain },
+            { id: "ledger", label: `Transactions & Rule Memory (${data.learned_rules.length} Rules)`, icon: Brain },
             { id: "simulator", label: "What-If Goal Planner", icon: Sliders },
             { id: "coach", label: "Guardrailed Coach", icon: MessageSquare },
             { id: "report", label: "Monthly Review Report", icon: FileText },
@@ -383,6 +391,55 @@ export default function ArthaTwinDashboard() {
         {/* TAB 1: LIVING OVERVIEW */}
         {activeTab === "overview" && (
           <div className="space-y-6">
+            <section className="money-twin-hero rounded-3xl border border-indigo-400/20 bg-slate-950/80 p-5 sm:p-7 lg:p-8" aria-labelledby="money-model-title">
+              <div className="money-hero-orbit" aria-hidden="true" />
+              <div className="relative grid items-center gap-7 md:grid-cols-[1.15fr_0.85fr]">
+                <div className="space-y-4">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_#34d399]" /> Living money model · {selectedMonth}
+                  </div>
+                  <div>
+                    <h2 id="money-model-title" className="max-w-xl text-2xl font-semibold tracking-tight text-white sm:text-3xl">Your month, made legible.</h2>
+                    <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">Observed transactions and your saved assumptions work together here. See what moved this month, then explore how a change could affect your goals.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs text-slate-300">
+                    <span className="rounded-lg border border-slate-700/80 bg-slate-900/80 px-3 py-2">{data.summary.transactions_count ?? data.transactions.length} imported rows in period</span>
+                    <span className="rounded-lg border border-slate-700/80 bg-slate-900/80 px-3 py-2">Assumptions stay separate from observations</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-[auto_1fr] items-center gap-5 sm:gap-7">
+                  <div
+                    className="money-spend-ring grid h-32 w-32 place-items-center rounded-full sm:h-40 sm:w-40"
+                    role="progressbar"
+                    aria-label="Observed expenses as a share of imported income"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.min(100, observedOutflowPercent ?? 0)}
+                    style={{ "--spend-angle": `${Math.min(100, observedOutflowPercent ?? 0) * 3.6}deg` } as React.CSSProperties}
+                  >
+                    <div className="grid h-[78%] w-[78%] content-center rounded-full border border-white/5 bg-slate-950 text-center shadow-[inset_0_2px_18px_rgb(0_0_0/50%)]">
+                      <span className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">{observedOutflowPercent === null ? "—" : `${observedOutflowPercent}%`}</span>
+                      <span className="mt-0.5 text-[9px] uppercase tracking-[0.16em] text-slate-400">observed outflow</span>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="money-hero-metric border-l-2 border-emerald-400 pl-3">
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-slate-400">Imported income</p>
+                      <p className="mt-0.5 text-lg font-semibold tabular-nums text-emerald-300">₹{Number(data.summary.observed_income ?? 0).toLocaleString("en-IN")}</p>
+                    </div>
+                    <div className="money-hero-metric border-l-2 border-cyan-400 pl-3">
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-slate-400">Expenses after refunds</p>
+                      <p className="mt-0.5 text-lg font-semibold tabular-nums text-cyan-200">₹{Number(data.total_spent ?? 0).toLocaleString("en-IN")}</p>
+                    </div>
+                    <div className="money-hero-metric border-l-2 border-violet-400 pl-3">
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-slate-400">Modeled surplus</p>
+                      <p className="mt-0.5 text-lg font-semibold tabular-nums text-violet-200">₹{Number(data.summary.modeled_surplus ?? 0).toLocaleString("en-IN")}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p className="relative mt-5 border-t border-slate-800/80 pt-3 text-[11px] text-slate-500">Outflow share compares imported debits after refunds with imported income for this selected period. Modeled surplus also uses profile assumptions; these figures are not a verified bank balance.</p>
+            </section>
             <div className="flex justify-between items-center">
               <label className="text-xs text-slate-400 flex items-center gap-2"><input type="checkbox" checked={coverageConfirmed} onChange={(e) => void setCoverage(e.target.checked)} /> I confirmed the {selectedMonth} statement is complete</label>
               {!PUBLIC_DEMO && <button onClick={openProfileEditor} className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm font-medium">Edit Profile &amp; Goals</button>}
@@ -692,10 +749,10 @@ export default function ArthaTwinDashboard() {
             <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 h-fit">
               <div className="flex items-center gap-2">
                 <Brain className="w-5 h-5 text-indigo-400" />
-                <h2 className="text-sm font-bold text-white">AI Learned Rule Memory</h2>
+                <h2 className="text-sm font-bold text-white">Learned Rule Memory</h2>
               </div>
               <p className="text-xs text-slate-400">
-                Every user correction compiles into a deterministic rule with higher precedence than default heuristics.
+                Corrections create deterministic merchant rules with higher precedence than defaults. This rule memory is not an LLM.
               </p>
               {data.learned_rules.length === 0 ? (
                 <div className="p-4 rounded-xl bg-slate-950 border border-dashed border-slate-800 text-xs text-slate-400">
@@ -864,7 +921,7 @@ export default function ArthaTwinDashboard() {
               ))}
             </div>
 
-            <label className="flex items-start gap-2 text-xs text-slate-400"><input type="checkbox" checked={allowExternalAi} onChange={(e) => setAllowExternalAi(e.target.checked)} /><span>Allow optional external AI to receive this question for tool selection. Stored profile, transactions, and calculated results stay on this server; the selected tool runs locally. Do not include account numbers or other sensitive identifiers. Off by default.</span></label>
+            <label className="flex items-start gap-2 text-xs text-slate-400"><input type="checkbox" checked={allowExternalAi} onChange={(e) => setAllowExternalAi(e.target.checked)} /><span>Allow Google Gemini to receive your next question and selected reporting month for read-only tool selection. Profile data, transactions, raw narration, and calculated results stay on this server; the selected tool runs locally and its result is explained deterministically. This consent resets after one question. Do not include account numbers or other sensitive identifiers. Off by default.</span></label>
 
             <div className="flex gap-2 pt-2">
               <input
@@ -966,9 +1023,9 @@ export default function ArthaTwinDashboard() {
         {activeTab === "settings" && (
           <section className="max-w-3xl mx-auto p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-5">
             <div><h2 className="text-xl font-bold">Privacy, settings &amp; data</h2><p className="text-sm text-slate-400 mt-1">ArthaTwin stores the profile and imported records in its configured database. No bank connection is made.</p></div>
-            <div className="rounded-xl bg-slate-950 border border-slate-800 p-4 text-sm space-y-2"><p><strong>AI:</strong> deterministic coaching is the default. If enabled by the server and opted in per question, the question text is sent to Google for tool selection; profile, transaction data, tool results and raw narration stay on this server.</p><p><strong>Financial safety:</strong> educational planning only; no security recommendations, guaranteed returns or money movement.</p><p><strong>Current mode:</strong> {PUBLIC_DEMO ? "Shared synthetic-data demo. Personal imports, profile edits and deletion are blocked; demo corrections are visible to other visitors." : "Single-user local mode. This instance has no login or multi-user data isolation; do not expose it publicly."}</p></div>
+            <div className="rounded-xl bg-slate-950 border border-slate-800 p-4 text-sm space-y-2"><p><strong>AI:</strong> deterministic coaching is the default. If the server enables Google Gemini and you opt in for one question, only that question and its selected reporting month are sent for bounded tool selection. Profile data, transactions, raw narration, and tool results stay on this server; local code executes the selected read-only tool and writes the answer from its verified result. Errors and invalid selections fall back to deterministic coaching.</p><p><strong>Financial safety:</strong> educational planning only; no security recommendations, guaranteed returns or money movement.</p><p><strong>Current mode:</strong> {PUBLIC_DEMO ? "Shared synthetic-data demo. Personal imports, profile edits and deletion are blocked; demo corrections are visible to other visitors." : "Single-user local mode. This instance has no login or multi-user data isolation; do not expose it publicly."}</p></div>
             <div className="flex flex-wrap gap-2"><a href={`${API}/transactions/export.csv`} className="px-4 py-2 rounded-lg bg-slate-800">Download transactions CSV</a><a href={`${API}/data/export.json`} className="px-4 py-2 rounded-lg bg-slate-800">Download data JSON</a>{!PUBLIC_DEMO && <button onClick={async () => { if (window.confirm("Permanently delete all ArthaTwin transactions, rules, goals and imports?")) { const response = await fetch(`${API}/data`, { method: "DELETE", headers: { "X-Confirm-Delete": "DELETE ARTHATWIN DATA" } }); if (response.ok) { setIngestBanner("Your local ArthaTwin data was deleted."); await fetchDashboard(); } else setError("Data deletion failed."); } }} className="px-4 py-2 rounded-lg bg-rose-950 text-rose-200">Delete all data…</button>}</div>
-            <p className="text-xs text-slate-500">External AI consent is asked in the coach for each session setting and defaults off. Profile values are user-provided assumptions; transaction aggregates may be incomplete.</p>
+            <p className="text-xs text-slate-500">External AI consent is requested one question at a time and defaults off. Profile values are user-provided assumptions; transaction aggregates may be incomplete.</p>
           </section>
         )}
       </main>

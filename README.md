@@ -9,7 +9,8 @@ ArthaTwin imports CSV, text-based PDF and SMS transaction data; previews every i
 - Next.js 16 / React 19 frontend; FastAPI / SQLAlchemy backend.
 - INR amounts use decimal precision; transfers, refunds and credits have separate treatment in monthly calculations.
 - The public-demo mode is synthetic-data-only. It disables personal imports and profile/goal writes, and filters reads and exports to demo rows.
-- Optional Gemini function calling is off by default, requires both a server-side key/configuration and per-question consent, uses bounded read-only functions, and falls back to the deterministic coach.
+- Optional Google Gemini function calling is off by default, requires `EXTERNAL_AI_ENABLED=1`, a server-side API key, and one-question consent. Gemini receives only the question and selected month to choose one of seven bounded read-only tools. The tool runs locally and a deterministic explanation is grounded in its verified result; profile/transaction data and raw narration stay on the server. Errors or invalid tool choices fall back to the deterministic coach.
+- Merchant categorization and correction memory are deterministic rules, not an LLM. Goal scenarios are mathematical calculations, not AI predictions.
 - Live synthetic demo: [arthatwin-living-money-model-2.onrender.com](https://arthatwin-living-money-model-2.onrender.com/). Backend health: [API health](https://arthatwin-living-money-model.onrender.com/api/health). This is a restricted public demo, not a production financial service.
 
 ## Run locally
@@ -47,7 +48,7 @@ For a synthetic-only public demo, set `ARTHATWIN_PUBLIC_DEMO=1`, `SEED_SYNTHETIC
 
 ## Verification
 
-See [TEST_REPORT.md](TEST_REPORT.md) for exact commands, observed results and unrun checks. The latest local acceptance run recorded 26 backend tests passing, frontend ESLint passing, and a Next.js production build passing. This is not evidence of a live deployment or a real Gemini API call.
+See [TEST_REPORT.md](TEST_REPORT.md) for exact commands, observed results and unrun checks. The latest local acceptance run passed 33 backend tests, frontend ESLint, and a Next.js production build. Live dashboard/API connectivity was verified; the optional Gemini provider was not called live.
 
 ## Documentation
 
@@ -56,7 +57,7 @@ See [TEST_REPORT.md](TEST_REPORT.md) for exact commands, observed results and un
 - [Security and privacy](SECURITY.md)
 - [API reference](API.md)
 - [Deployment guide](DEPLOYMENT.md)
-- [Three-minute demo script](DEMO_SCRIPT.md)
+- [60–90 second and three-minute demo scripts](DEMO_SCRIPT.md)
 - [Changelog](CHANGELOG.md)
 - [Hackathon project report](PROJECT_REPORT.md)
 - [Requirements and judging map](FEATURES_AND_REQUIREMENTS.md)

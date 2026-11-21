@@ -17,7 +17,7 @@ Do not deploy personal mode to the public internet. A personal multi-user servic
 - CORS credentials are disabled. Set the exact frontend origin in `CORS_ALLOWED_ORIGINS` for deployment.
 - Secrets belong in backend environment configuration only. Never prefix secrets with `NEXT_PUBLIC_` or commit them.
 - Imported descriptions are untrusted. Injection-like text is quarantined for classification and is not included in optional external AI tool results.
-- External AI is disabled by default. It requires server enablement, a server-side API key, and user consent per request. When enabled, only the user's question text is sent to Google for bounded tool selection; stored profile, transaction rows, raw narration and calculated tool results remain on the application server. The returned tool name and arguments are validated, the tool executes locally, and the numerical explanation is composed locally from the verified result. Errors or invalid calls fall back to the deterministic coach without logging request contents.
+- External Google Gemini tool selection is disabled by default. It requires `EXTERNAL_AI_ENABLED=1`, a server-side API key, and one-question UI consent. The selected reporting month and the question (up to 2,000 characters) are sent to Google; stored profile, transaction rows, raw narration and calculated tool results remain on this server. The returned tool name and empty arguments are validated, the read-only tool executes locally, and the answer is composed locally from verified results. Errors or invalid calls fall back to the deterministic coach. The app does not intentionally log coach prompts.
 - The finance coach blocks requests for specific securities and guaranteed investment returns, and performs no financial transactions.
 
 ## Known risks / unverified items
@@ -25,7 +25,7 @@ Do not deploy personal mode to the public internet. A personal multi-user servic
 - Shared demo writes to synthetic classifications and subscription feedback are visible to all visitors.
 - There is no rate limiting or account layer. Hosting should add request-rate controls for public traffic.
 - No automated dependency vulnerability or secret scanner is configured in this repository. A source scan and credential audit were not run as part of the local build.
-- Production CORS and secret settings cannot be verified until a host is provisioned.
+- Render was provisioned and the live frontend/API handshake was verified. The public `NEXT_PUBLIC_API_URL` and exact CORS origin were inspected; secret values remain masked and are not recorded in [DEPLOYMENT_REPORT.md](DEPLOYMENT_REPORT.md). CORS preflight returned 200 in current logs.
 - Free compute platforms may have ephemeral storage, cold starts or database expiry. Do not use ephemeral SQLite for a product that promises durable profile/goal data.
 - Optional Gemini calls were not sent during local tests.
 - Gemini tool selection is tested with a local fake SDK response, not a live Gemini credential. Provider availability and model behavior remain unverified.
