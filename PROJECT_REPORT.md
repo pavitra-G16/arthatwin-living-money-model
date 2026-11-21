@@ -25,6 +25,7 @@ Indian bank data arrives as CSV rows, statement PDFs, and SMS text with noisy UP
 - On startup with synthetic seeding enabled, the backend re-evaluates only unlocked, non-learned synthetic categories. It preserves manually locked and user-learned labels and does not touch non-demo records.
 - The what-if view now shows baseline surplus, simulated surplus, and monthly delta side by side. Recurring candidates show inferred cadence, observation count, and qualitative confidence. Print styling scopes output to the monthly report.
 - The sample has 16 rows total across two months; 14 belong to November. Exact totals and the dining/rent scenarios are documented in [FEATURES_AND_REQUIREMENTS.md](FEATURES_AND_REQUIREMENTS.md).
+- Commit `4c19a37` is live on both Render services. The live frontend dashboard and direct backend dashboard API agree on November totals: ₹85,000 income, ₹34,006 expenses after refunds, ₹50,994 observed net savings, and ₹44,172 modeled surplus.
 
 ## Known limitations
 
@@ -33,6 +34,6 @@ Indian bank data arrives as CSV rows, statement PDFs, and SMS text with noisy UP
 - Text-based PDF parsing is supported; scanned PDF OCR is not.
 - No live bank integrations or transaction execution.
 - Gemini is optional and was not called during verification.
-- Latest audit code/test changes await a successful Render deployment and post-deploy smoke check.
+- Browser print/PDF output, responsive layouts, and full hosted import-to-report journeys have not been verified. Cross-redeploy persistence is not guaranteed on ephemeral SQLite.
 
 See [FEATURES_AND_REQUIREMENTS.md](FEATURES_AND_REQUIREMENTS.md), [TEST_REPORT.md](TEST_REPORT.md), [DEPLOYMENT_REPORT.md](DEPLOYMENT_REPORT.md), and [SECURITY.md](SECURITY.md) for evidence and caveats.
