@@ -33,7 +33,8 @@
     "SYN-REF-0031": "Subscriptions",
     "SYN-REF-0032": "Transfers",
     "SYN-REF-0033": "Groceries",
-    "SYN-REF-0034": "Shopping"
+    "SYN-REF-0034": "Shopping",
+    "SYN-REF-0018": "Food & Dining"
   },
   "duplicate_row_reference": "SYN-REF-0018",
   "notes": "The repeated SYN-REF-0018 row is an intentional exact duplicate. Categories are fixture labels, not application output."

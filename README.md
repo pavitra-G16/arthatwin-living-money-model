@@ -1,74 +1,60 @@
-# ArthaTwin — Personal Finance Coach with a Living Money Model
+# ArthaTwin
 
-ArthaTwin turns supplied Indian bank statement data into a persistent, editable cashflow model. Categorization can use an optional language model for unknown merchants, while recurring detection, budget drift, financial totals, and goal projections remain deterministic Python calculations.
+**Intelligence Behind Every Rupee** — a personal finance coach built around a period-aware, deterministic cashflow model.
 
-## Architecture
+ArthaTwin imports CSV, text-based PDF and SMS transaction data; previews every import before saving; categorizes transactions with confidence; learns user corrections; detects recurring-payment candidates; models goal scenarios; and produces a period-scoped monthly review. It is an educational planning tool, not a financial adviser.
 
-- `backend/main.py` exposes the FastAPI API and owns ingestion, corrections, profile, goals, subscriptions, dashboard, simulation, and coach routes.
-- `backend/engine.py` contains CSV, text-PDF, and SMS parsing; injection detection; deterministic merchant rules; recurring payment checks; goal math; and coaching guardrails.
-- `backend/database.py` defines the SQLite-backed SQLAlchemy model. Set `DATABASE_URL` to place the database on persistent storage.
-- `frontend/app/page.tsx` is the Next.js dashboard. Its API base is `NEXT_PUBLIC_API_URL`, defaulting to `http://127.0.0.1:8000/api`.
+## Current state
 
-The app does not connect to banks. The user imports files or pastes SMS text. PDF support is limited to text-based statements whose transaction rows expose a date, narration, amount, and optional DR/CR marker; scanned PDFs and OCR are not supported. CSV supports common Indian bank date, narration/description, debit/withdrawal, and credit/deposit column names. SMS parsing skips OTP, promotion, and balance-only messages and returns parsed and ignored counts.
-
-The ingestion pipeline flags and quarantines common prompt-injection phrases in narration before categorization. The UI displays the security flag on each affected transaction. Corrections create persistent merchant rules, update matching unlocked transactions, and lock the corrected row against future rule updates. Person-to-person transfers are categorized as `Transfers / People` and excluded from discretionary totals.
-
-Recurring alerts are based on repeated merchant transactions and observed amounts. The app cannot observe whether a user opened or used an app; recurring services therefore show a persistent Yes / No / Unsure confirmation. What-If projections use verified profile values, ledger entries, user-confirmed unused subscriptions, and the selected scenario levers. They are simple constant-monthly-surplus estimates, not predictions. Where the modeled surplus is not positive, the goal completion date is shown as unavailable.
-
-Gemini (`google-genai`) is optional. Without `GEMINI_API_KEY`, unknown merchants remain reviewable and the coach uses a deterministic response. With a key, Gemini may suggest an unknown merchant category or phrase coaching text; it is not used to compute financial values. Requests for specific stock, mutual fund, crypto, or securities picks are blocked before an AI call.
+- Next.js 16 / React 19 frontend; FastAPI / SQLAlchemy backend.
+- INR amounts use decimal precision; transfers, refunds and credits have separate treatment in monthly calculations.
+- The public-demo mode is synthetic-data-only. It disables personal imports and profile/goal writes, and filters reads and exports to demo rows.
+- Optional Gemini function calling is off by default, requires both a server-side key/configuration and per-question consent, uses bounded read-only functions, and falls back to the deterministic coach.
+- This repository does not currently have a deployed production URL. See [DEPLOYMENT.md](DEPLOYMENT.md) for the exact hosting requirements and outstanding provider action.
 
 ## Run locally
 
-Backend (Python 3.11+):
+Backend (from `backend/`):
 
 ```bash
-cd backend
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-Frontend (Node.js 20+):
+Frontend (from `frontend/`, in a second terminal):
 
 ```bash
-cd frontend
 npm ci
 NEXT_PUBLIC_API_URL=http://127.0.0.1:8000/api npm run dev
 ```
 
-Open `http://localhost:3000` and choose **Load Sample Indian Bank Data** to populate the demo. Set `GEMINI_API_KEY` in the backend environment only if you want the optional Gemini fallback. Do not put that key in the frontend.
+Open `http://localhost:3000`. Use **Load Sample Indian Bank Data** to create clearly fictional records. The reset/seed operation only replaces records marked as synthetic demo rows; it preserves non-demo profile and transaction data. A local `backend/arthatwin.db` file is ignored by Git.
 
-Run the deterministic and API tests from the repository root:
+For a synthetic-only public demo, set `ARTHATWIN_PUBLIC_DEMO=1`, `SEED_SYNTHETIC_DEMO_ON_START=1`, and a strong `DEMO_RESET_TOKEN` on the backend; set `NEXT_PUBLIC_ARTHATWIN_PUBLIC_DEMO=1` at frontend build time. Also set `CORS_ALLOWED_ORIGINS` to the exact HTTPS frontend origin. Public demo users share fictional sample data; do not put real financial data there.
 
-```bash
-backend/venv/bin/pytest -q backend/tests
-```
+## Main workflows
 
-Build the frontend:
+1. Choose a reporting month and inspect imported transactions, profile assumptions and data-quality notes.
+2. In the transaction centre, upload CSV/PDF/TXT or paste bank SMS, review parsed rows, deselect duplicates, provide missing dates and confirm the rows to save.
+3. Correct a transaction category after seeing the actual unlocked-match count; the correction is persisted as a learned merchant rule. Rules can be disabled.
+4. Review recurring-payment candidates and record whether a service is still used. The app does not infer service usage from a debit.
+5. Adjust dining, rent, income and subscription assumptions in the deterministic what-if simulator.
+6. Ask the coach for a profile, monthly summary, recurring, or scenario explanation. It returns the selected tool and verified result. External model processing remains opt-in.
+7. Confirm statement completeness for both comparison months before the app surfaces month-over-month spending drift.
+8. Print the selected-month report or export CSV/JSON. Clear-data requires an explicit confirmation.
 
-```bash
-cd frontend
-npm run build
-```
+## Verification
 
-## Deploy
+See [TEST_REPORT.md](TEST_REPORT.md) for exact commands, observed results and unrun checks. The latest local acceptance run recorded 26 backend tests passing, frontend ESLint passing, and a Next.js production build passing. This is not evidence of a live deployment or a real Gemini API call.
 
-### Render API
+## Documentation
 
-Create a Python web service rooted at `backend/`. Use build command `pip install -r requirements.txt` and start command `uvicorn main:app --host 0.0.0.0 --port $PORT`. Add a persistent disk mounted at `/var/data` and set `DATABASE_URL=sqlite:////var/data/arthatwin.db`. For an optional model fallback, add `GEMINI_API_KEY` as a secret environment variable. Set `CORS_ALLOWED_ORIGINS` to the deployed Vercel origin (comma-separated if needed).
-
-SQLite requires persistent storage to retain user data across Render restarts. Without the disk and `DATABASE_URL`, the default local database is ephemeral on most hosted instances.
-
-### Vercel frontend
-
-Import the repository and set the project root to `frontend`. Set `NEXT_PUBLIC_API_URL` to the deployed Render API base including `/api` (for example, `https://your-service.onrender.com/api`), then deploy. Confirm the Render origin is present in `CORS_ALLOWED_ORIGINS`.
-
-## Demo and submission
-
-1. Seed the sample data and point out the PDF/CSV/SMS source labels, the Netflix price increase, the P2P transfer exclusion, and the quarantined hostile narration.
-2. Change a transaction category and show the learned rule, retroactive updates, and user lock.
-3. Mark a subscription as No, then show the deterministic What-If result and edit profile/goal inputs.
-4. Ask the coach for a mid-cap mutual fund pick to show the guardrail, then print the monthly review.
-
-The monthly review uses the current stored profile and ledger. It is an educational cashflow summary, not regulated financial advice.
+- [Product specification](PRODUCT_SPEC.md)
+- [Architecture](ARCHITECTURE.md)
+- [Security and privacy](SECURITY.md)
+- [API reference](API.md)
+- [Deployment guide](DEPLOYMENT.md)
+- [Three-minute demo script](DEMO_SCRIPT.md)
+- [Changelog](CHANGELOG.md)
