@@ -828,7 +828,47 @@ def delete_user_data(confirmation: str | None = Header(default=None, alias="X-Co
     return {"deleted": True, "profile_reset": bool(profile)}
 
 
+def _refresh_unlocked_demo_categories(db: Session) -> int:
+    """Re-evaluate only synthetic rows still carrying automatic categories."""
+    rows = db.query(Transaction).filter(
+        Transaction.is_demo.is_(True),
+        Transaction.user_locked.is_(False),
+    ).all()
+    updated = 0
+    for row in rows:
+        if row.confidence_source == "LEARNED_RULE":
+            continue
+        safe_merchant = extract_merchant_token(row.raw_narration)
+        merchant_changed = bool(safe_merchant and row.merchant != safe_merchant)
+        if merchant_changed:
+            row.merchant = safe_merchant
+            row.fingerprint = transaction_fingerprint({
+                "date": row.date,
+                "raw_narration": row.raw_narration,
+                "merchant": safe_merchant,
+                "amount": row.amount,
+                "txn_type": row.txn_type,
+            })
+        category, source, confidence = categorize_with_evidence(
+            db, safe_merchant or row.merchant, row.raw_narration, Decimal(row.amount), row.txn_type
+        )
+        if merchant_changed or (row.category, row.confidence_source, row.confidence_score) != (category, source, confidence):
+            row.category = category
+            row.confidence_source = source
+            row.confidence_score = confidence
+            updated += 1
+    if updated:
+        db.commit()
+    return updated
+
+
 if os.getenv("SEED_SYNTHETIC_DEMO_ON_START", "0") == "1":
     with SessionLocal() as startup_db:
-        if startup_db.query(Transaction.id).filter(Transaction.is_demo.is_(True)).first() is None:
+        has_demo_transactions = startup_db.query(Transaction.id).filter(Transaction.is_demo.is_(True)).first() is not None
+        if not has_demo_transactions:
             seed_indian_demo_data(startup_db, token=os.getenv("DEMO_RESET_TOKEN"))
+        else:
+            # The live synthetic dataset predates merchant-first UPI
+            # categorization. Correct its derived labels at startup without
+            # touching user data, learned classifications, or user locks.
+            _refresh_unlocked_demo_categories(startup_db)

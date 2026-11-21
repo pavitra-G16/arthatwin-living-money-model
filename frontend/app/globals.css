@@ -187,3 +187,40 @@ main[class~="bg-gradient-to-br"] > section > div:last-child > div > div:hover {
     transition-duration: 0.01ms !important;
   }
 }
+
+@media print {
+  @page { margin: 14mm; }
+
+  body {
+    color: #111827 !important;
+    background: #fff !important;
+    print-color-adjust: economy;
+  }
+
+  body * {
+    visibility: hidden !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  [data-monthly-report],
+  [data-monthly-report] * {
+    visibility: visible !important;
+    color: #111827 !important;
+    background: #fff !important;
+    border-color: #d1d5db !important;
+  }
+
+  [data-monthly-report] {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    max-width: none !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  [data-monthly-report] button { display: none !important; }
+  [data-monthly-report] section,
+  [data-monthly-report] li { break-inside: avoid; }
+}

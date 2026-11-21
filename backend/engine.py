@@ -27,6 +27,12 @@ from finance import (
 from importers import clean_untrusted, parse_csv_bytes, parse_pdf_bytes, parse_sms_dump, quarantined
 
 DEFAULT_MERCHANT_MAP = {
+    # Specific merchant phrases must win over broad brand and UPI transfer
+    # heuristics (many Indian UPI narrations have a DR/CR path segment).
+    "SWIGGY INSTAMART": ("Groceries", 0.99), "INSTAMART": ("Groceries", 0.98),
+    "STARBUCKS COFFEE": ("Dining Out", 0.98), "ZOMATO ORDER": ("Dining Out", 0.98),
+    "NOBROKER RENT": ("Housing", 0.99), "AIRTEL FIBER": ("Utilities", 0.99),
+    "RAHUL SHARMA": ("Transfers / People", 0.99),
     "ZOMATO": ("Dining Out", 0.98), "SWIGGY": ("Dining Out", 0.98), "STARBUCKS": ("Dining Out", 0.96),
     "CHAI POINT": ("Dining Out", 0.94), "CAFE": ("Dining Out", 0.78), "FOOD": ("Dining Out", 0.74),
     "BLINKIT": ("Groceries", 0.98), "ZEPTO": ("Groceries", 0.96), "BIGBASKET": ("Groceries", 0.98), "DMART": ("Groceries", 0.95),
@@ -61,7 +67,7 @@ def quarantine_untrusted_text(raw_text: str) -> str:
 
 def extract_merchant_token(raw_text: str) -> str:
     from importers import merchant_from_text
-    return merchant_from_text(raw_text)
+    return merchant_from_text(clean_untrusted(raw_text))
 
 
 def _transfer_or_refund(raw: str) -> str | None:
@@ -95,11 +101,20 @@ def categorize_with_evidence(db: Session, merchant: str, raw_narration: str, amo
     for rule in learned:
         if exact_merchant == " ".join(rule.pattern.upper().split()):
             return rule.category, "LEARNED_RULE", 1.0
+    merchant_key = " ".join(merchant.upper().split())
+    # Match merchant-specific defaults before interpreting the surrounding UPI
+    # narration. For example, UPI/.../DR/SWIGGY INSTAMART/... is a purchase,
+    # while UPI/.../DR/RAHUL SHARMA/... is a person-to-person transfer.
+    for token in sorted(DEFAULT_MERCHANT_MAP, key=len, reverse=True):
+        if token in merchant_key:
+            category, confidence = DEFAULT_MERCHANT_MAP[token]
+            return category, "MERCHANT_RULE", confidence
     special = _transfer_or_refund(searchable)
     if special:
         return special, "TRANSFER_RULE", 0.96
-    for token, (category, confidence) in DEFAULT_MERCHANT_MAP.items():
+    for token in sorted(DEFAULT_MERCHANT_MAP, key=len, reverse=True):
         if token in searchable:
+            category, confidence = DEFAULT_MERCHANT_MAP[token]
             return category, "MERCHANT_RULE", confidence
     if re.search(r"\b(SALARY|PAYROLL|WAGES)\b", searchable):
         return "Income", "INCOME_RULE", 0.95
@@ -156,6 +171,9 @@ def detect_recurring_and_creep(db: Session):
         prev_day, previous = items[-2]
         if _cadence((latest_day - prev_day).days) != cadence:
             continue
+        cadence_matches = sum(1 for interval in intervals if _cadence(interval) == cadence)
+        consistency = cadence_matches / len(intervals)
+        confidence = "low" if len(items) < 3 else "medium" if len(items) < 5 or consistency < 0.8 else "high"
         latest_amount = decimal_money(latest.amount)
         previous_amount = decimal_money(previous.amount)
         pct = ((latest_amount - previous_amount) / previous_amount * Decimal(100)) if previous_amount else ZERO
@@ -177,6 +195,9 @@ def detect_recurring_and_creep(db: Session):
             "merchant": merchant,
             "type": alert_type,
             "cadence": cadence,
+            "confidence": confidence,
+            "observation_count": len(items),
+            "cadence_consistency": round(consistency, 2),
             "reason": reason,
             "last_amount": latest_amount,
             "monthly_amount": monthly_amount,

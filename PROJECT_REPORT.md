@@ -19,6 +19,13 @@ Indian bank data arrives as CSV rows, statement PDFs, and SMS text with noisy UP
 - Backend health: https://arthatwin-living-money-model.onrender.com/api/health
 - The public demo mode filters to synthetic rows and disables personal imports and profile/goal writes. Never enter real financial information.
 
+## Audit fixes
+
+- UPI merchant phrases now take priority over generic transfer-narration detection. The synthetic examples map Instamart to Groceries, Starbucks/Zomato to Dining Out, NoBroker rent to Housing, Airtel Fiber to Utilities, and Rahul Sharma to Transfers / People.
+- On startup with synthetic seeding enabled, the backend re-evaluates only unlocked, non-learned synthetic categories. It preserves manually locked and user-learned labels and does not touch non-demo records.
+- The what-if view now shows baseline surplus, simulated surplus, and monthly delta side by side. Recurring candidates show inferred cadence, observation count, and qualitative confidence. Print styling scopes output to the monthly report.
+- The sample has 16 rows total across two months; 14 belong to November. Exact totals and the dining/rent scenarios are documented in [FEATURES_AND_REQUIREMENTS.md](FEATURES_AND_REQUIREMENTS.md).
+
 ## Known limitations
 
 - No login or tenant isolation; public users share the synthetic demo state.
@@ -26,5 +33,6 @@ Indian bank data arrives as CSV rows, statement PDFs, and SMS text with noisy UP
 - Text-based PDF parsing is supported; scanned PDF OCR is not.
 - No live bank integrations or transaction execution.
 - Gemini is optional and was not called during verification.
+- Latest audit code/test changes await a successful Render deployment and post-deploy smoke check.
 
 See [FEATURES_AND_REQUIREMENTS.md](FEATURES_AND_REQUIREMENTS.md), [TEST_REPORT.md](TEST_REPORT.md), [DEPLOYMENT_REPORT.md](DEPLOYMENT_REPORT.md), and [SECURITY.md](SECURITY.md) for evidence and caveats.

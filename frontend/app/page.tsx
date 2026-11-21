@@ -41,7 +41,7 @@ type Goal = { id: number; name: string; target_amount: number; saved_amount: num
 type GoalDraft = Omit<Goal, "id"> & { id?: number };
 type Transaction = { id: number; date: string; raw_narration: string; merchant: string; amount: number; txn_type: string; category: string; source: string; confidence_source: string; user_locked: boolean; security_flag: string | null };
 type LearnedRule = { id: number; pattern: string; category: string; explanation: string; hit_count: number; is_enabled: boolean; matching_count: number };
-type RecurringAlert = { merchant: string; type: string; reason: string; monthly_amount: number; annual_cost: number; still_uses: "yes" | "no" | "unsure" };
+type RecurringAlert = { merchant: string; type: string; reason: string; cadence: string; confidence: "low" | "medium" | "high"; observation_count: number; monthly_amount: number; annual_cost: number; still_uses: "yes" | "no" | "unsure" };
 type Dashboard = {
   month: string; profile: Profile; goals: Goal[]; transactions: Transaction[];
   learned_rules: LearnedRule[]; recurring_alerts: RecurringAlert[];
@@ -50,7 +50,7 @@ type Dashboard = {
   total_spent: number; summary: Record<string, number | boolean | null>; data_quality_warnings: string[]; disclaimer: string;
 };
 type Simulation = {
-  simulated_monthly_surplus: number; monthly_delta: number; assumptions: string; subscription_savings?: number;
+  base_monthly_surplus: number; simulated_monthly_surplus: number; monthly_delta: number; assumptions: string; subscription_savings?: number;
   goal_impacts: Array<{ goal_name: string; projected_completion: string | null; new_months: number | null; days_saved: number | null }>;
 };
 type AgentTrace = { event?: string; summary?: string; pattern_extracted?: string; transition?: string; retroactive_updates?: number; tool_selected?: string | null; reason?: string; verified_result?: unknown; ai_enabled?: boolean };
@@ -437,7 +437,7 @@ export default function ArthaTwinDashboard() {
               <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
                 <div className="text-xs text-slate-400 uppercase font-semibold">Observed savings rate</div>
                 <div className="mt-2 text-2xl font-bold text-indigo-400">{data.summary.net_observed_savings === null || Number(data.summary.observed_income ?? 0) <= 0 ? "Unavailable" : `${(Number(data.summary.net_observed_savings) / Number(data.summary.observed_income) * 100).toFixed(1)}%`}</div>
-                <p className="text-xs text-slate-400 mt-2">Based on imported credits and net expenses for {selectedMonth}; statement completeness may be unknown.</p>
+                <p className="text-xs text-slate-400 mt-2">Imported non-transfer credits minus expenses after refunds for {selectedMonth}; not a verified bank balance.</p>
               </div>
             </div>
 
@@ -525,6 +525,7 @@ export default function ArthaTwinDashboard() {
                           ₹{sub.monthly_amount}/mo (₹{(sub.annual_cost ?? 0).toLocaleString("en-IN")}/yr)
                         </span>
                       </div>
+                      <p className="text-[11px] text-cyan-200 mt-1">Inferred {sub.cadence} pattern · {sub.confidence} confidence · {sub.observation_count} dated payments</p>
                       <p className="text-xs text-slate-300 mt-1.5">{sub.reason}</p>
                       <div className="mt-3 flex items-center gap-2 text-xs">
                         <span className="text-slate-400">Still use this?</span>
@@ -792,15 +793,18 @@ export default function ArthaTwinDashboard() {
             </div>
 
             <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-5">
-              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-slate-800">
-                <div>
-                  <div className="text-xs text-slate-400">Simulated Monthly Surplus</div>
-                  <div className="text-2xl font-extrabold text-white">
-                    ₹{(simResult.simulated_monthly_surplus ?? 0).toLocaleString("en-IN")}/mo
-                  </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
+                  <div className="text-xs text-slate-400">Baseline Monthly Surplus</div>
+                  <div className="text-xl font-bold text-slate-100">₹{(simResult.base_monthly_surplus ?? 0).toLocaleString("en-IN")}/mo</div>
                 </div>
-                <div className={`text-sm font-bold px-3 py-1 rounded-full ${simResult.monthly_delta >= 0 ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"}`}>
-                  {simResult.monthly_delta >= 0 ? "+" : ""}₹{(simResult.monthly_delta ?? 0).toLocaleString("en-IN")}/mo vs baseline
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
+                  <div className="text-xs text-slate-400">Simulated Monthly Surplus</div>
+                  <div className="text-xl font-extrabold text-white">₹{(simResult.simulated_monthly_surplus ?? 0).toLocaleString("en-IN")}/mo</div>
+                </div>
+                <div className={`p-4 rounded-xl border ${simResult.monthly_delta >= 0 ? "bg-emerald-500/10 border-emerald-500/30" : "bg-rose-500/10 border-rose-500/30"}`}>
+                  <div className="text-xs text-slate-400">Monthly Change vs Baseline</div>
+                  <div className={`text-xl font-bold ${simResult.monthly_delta >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{simResult.monthly_delta >= 0 ? "+" : "−"}₹{Math.abs(simResult.monthly_delta ?? 0).toLocaleString("en-IN")}/mo</div>
                 </div>
               </div>
 
@@ -883,7 +887,7 @@ export default function ArthaTwinDashboard() {
 
         {/* TAB 5: MONTHLY REVIEW REPORT */}
         {activeTab === "report" && (
-          <div className="max-w-4xl mx-auto p-4 sm:p-8 rounded-2xl bg-slate-900 border border-slate-800 space-y-6">
+          <div data-monthly-report className="max-w-4xl mx-auto p-4 sm:p-8 rounded-2xl bg-slate-900 border border-slate-800 space-y-6">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div>
                 <span className="text-[11px] uppercase tracking-wider text-emerald-400 font-bold">
@@ -899,7 +903,7 @@ export default function ArthaTwinDashboard() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
                 <div className="text-xs text-slate-400">Observed income</div>
                 <div className="text-xl font-bold text-emerald-400 mt-1">₹{formatINR(report?.income)}</div>
@@ -907,6 +911,10 @@ export default function ArthaTwinDashboard() {
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
                 <div className="text-xs text-slate-400">Observed expenses, net of refunds</div>
                 <div className="text-xl font-bold text-rose-400 mt-1">₹{formatINR(report?.expenses)}</div>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
+                <div className="text-xs text-slate-400">Refund adjustments</div>
+                <div className="text-xl font-bold text-amber-300 mt-1">₹{formatINR(report?.refunds)}</div>
               </div>
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
                 <div className="text-xs text-slate-400">Observed net savings</div>
@@ -922,7 +930,7 @@ export default function ArthaTwinDashboard() {
               <h3 className="text-sm font-bold text-white">1. Recurring payments to review</h3>
               <ul className="list-disc pl-5 text-sm text-slate-300 space-y-1">
                 {(report?.recurring_payments ?? []).map((a, i) => (
-                  <li key={i}><strong>{a.merchant}:</strong> {a.reason}</li>
+                  <li key={i}><strong>{a.merchant}:</strong> inferred {a.cadence} pattern, {a.confidence} confidence from {a.observation_count} dated payments. {a.reason}</li>
                 ))}
               </ul>
             </div>
@@ -946,7 +954,7 @@ export default function ArthaTwinDashboard() {
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-5"><section><h3 className="text-sm font-bold">Category breakdown</h3>{(report?.category_breakdown ?? []).map((item) => <p key={item.name} className="text-sm text-slate-300">{item.name}: ₹{Number(item.value).toLocaleString("en-IN")}</p>)}</section><section><h3 className="text-sm font-bold">Data quality and assumptions</h3><p className="text-xs text-slate-400">Profile income assumption: ₹{Number(report?.profile_income_assumption ?? 0).toLocaleString("en-IN")}. Savings figure is modeled, not verified account balance.</p>{(report?.data_quality.warnings ?? data.data_quality_warnings).map((warning, i) => <p key={i} className="text-xs text-amber-300">{warning}</p>)}</section></div>
+            <div className="grid md:grid-cols-2 gap-5"><section><h3 className="text-sm font-bold">Category breakdown</h3>{(report?.category_breakdown ?? []).map((item) => <p key={item.name} className="text-sm text-slate-300">{item.name}: ₹{Number(item.value).toLocaleString("en-IN")}</p>)}</section><section><h3 className="text-sm font-bold">Data quality and assumptions</h3><p className="text-xs text-slate-400">Observed savings uses imported credits and net expenses; it is not a verified bank balance. Modeled surplus uses the profile income and fixed-cost assumptions. Profile income assumption: ₹{Number(report?.profile_income_assumption ?? 0).toLocaleString("en-IN")}.</p>{(report?.data_quality.warnings ?? data.data_quality_warnings).map((warning, i) => <p key={i} className="text-xs text-amber-300">{warning}</p>)}</section></div>
 
             <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
