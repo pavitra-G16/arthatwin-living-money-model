@@ -10,7 +10,8 @@ import {
 } from "recharts";
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "https://arthatwin-living-money-model.onrender.com/api").replace(/\/$/, "");
-const API = process.env.NEXT_PUBLIC_API_URL || "https://arthatwin-living-money-model.onrender.com/api";
+const RAW_API = (process.env.NEXT_PUBLIC_API_URL || "https://arthatwin-living-money-model.onrender.com/api").replace(/\/+$/, "");
+const API = RAW_API.endsWith("/api") ? RAW_API : `${RAW_API}/api`;
 const PUBLIC_DEMO = process.env.NEXT_PUBLIC_ARTHATWIN_PUBLIC_DEMO === "1";
 
 const CATEGORIES = [
