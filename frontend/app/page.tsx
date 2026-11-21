@@ -9,8 +9,6 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
 } from "recharts";
 
-const _BASE = (process.env.NEXT_PUBLIC_API_URL || "https://arthatwin-living-money-model.onrender.com/api").replace(/\/+$/, "");
-const API_BASE = _BASE.endsWith("/api") ? _BASE : `${_BASE}/api`;
 const RAW_API = (process.env.NEXT_PUBLIC_API_URL || "https://arthatwin-living-money-model.onrender.com/api").replace(/\/+$/, "");
 const API = RAW_API.endsWith("/api") ? RAW_API : `${RAW_API}/api`;
 const PUBLIC_DEMO = process.env.NEXT_PUBLIC_ARTHATWIN_PUBLIC_DEMO === "1";

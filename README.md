@@ -10,7 +10,7 @@ ArthaTwin imports CSV, text-based PDF and SMS transaction data; previews every i
 - INR amounts use decimal precision; transfers, refunds and credits have separate treatment in monthly calculations.
 - The public-demo mode is synthetic-data-only. It disables personal imports and profile/goal writes, and filters reads and exports to demo rows.
 - Optional Gemini function calling is off by default, requires both a server-side key/configuration and per-question consent, uses bounded read-only functions, and falls back to the deterministic coach.
-- This repository does not currently have a deployed production URL. See [DEPLOYMENT.md](DEPLOYMENT.md) for the exact hosting requirements and outstanding provider action.
+- Live synthetic demo: [arthatwin-living-money-model-2.onrender.com](https://arthatwin-living-money-model-2.onrender.com/). Backend health: [API health](https://arthatwin-living-money-model.onrender.com/api/health). This is a restricted public demo, not a production financial service.
 
 ## Run locally
 
@@ -58,3 +58,7 @@ See [TEST_REPORT.md](TEST_REPORT.md) for exact commands, observed results and un
 - [Deployment guide](DEPLOYMENT.md)
 - [Three-minute demo script](DEMO_SCRIPT.md)
 - [Changelog](CHANGELOG.md)
+- [Hackathon project report](PROJECT_REPORT.md)
+- [Requirements and judging map](FEATURES_AND_REQUIREMENTS.md)
+- [Live deployment report](DEPLOYMENT_REPORT.md)
+- [Submission and launch materials](SUBMISSION_DETAILS.md)

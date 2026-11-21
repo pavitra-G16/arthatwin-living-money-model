@@ -1,6 +1,6 @@
 # Test and acceptance report
 
-Last verified locally on 2026-11-21 from the current `post-submission` worktree.
+Last verified locally and on the Render public demo on 2026-11-21.
 
 | Command | Observed result |
 | --- | --- |
@@ -10,12 +10,13 @@ Last verified locally on 2026-11-21 from the current `post-submission` worktree.
 
 The PDF test constructs a small text PDF and verifies extracted transaction fields. Scanned-PDF OCR is not supported and not claimed. The Gemini test uses a fake SDK response; no provider request was sent.
 
+Live checks: frontend loaded and displayed 14 synthetic transactions, modeled balances/goals, and recurring insights; frontend displayed the synthetic-demo label. Backend `/api/health` returned `{"status":"ok","database":"reachable","mode":"public-demo"}`. Render showed both services deployed successfully; CSS commit `dd7fc7d` was live on the frontend at verification.
+
 ## Not verified
 
-- No deployment or live URL exists. Hosting login, project connection and database provisioning are unavailable in this environment.
-- No browser-driven E2E interaction test was run. Import UI, dashboard, category correction, subscriptions, goals, reports, coach, privacy controls and mobile behavior have not been verified in a browser.
-- No live backend/database restart-persistence test or hosted frontend-to-backend communication test was possible.
+- No complete browser-driven E2E test suite was run. Import journeys, category correction, subscriptions, goals, reports, coach, privacy controls and mobile behavior still need full interaction testing.
+- Live checks confirm the frontend-to-backend dashboard path, but not all hosted workflows or restart-persistence.
 - No fresh-install run on a clean machine/container, vulnerability scan, or dedicated secret scanner was run.
-- Production CORS, secrets, health endpoint response and synthetic seed behavior are unverified on a host.
+- SQLite is reachable, but Render's local filesystem is ephemeral; cross-redeploy persistence is not verified and must not be assumed.
 
 An earlier command invoked frontend lint from `backend/` and returned `ENOENT`; the correct frontend lint and build commands above were run from `frontend/` and passed.
