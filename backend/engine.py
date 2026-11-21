@@ -62,8 +62,16 @@ def detect_prompt_injection(raw_text: str) -> str | None:
     return None
 
 
+def quarantine_untrusted_text(raw_text: str) -> str:
+    return re.sub(
+        r"(?i)(ignore all rules.*|ignore previous.*|system prompt.*|mark this as.*|you are now.*|override instructions.*)",
+        "",
+        raw_text,
+    )
+
+
 def extract_merchant_token(raw_text: str) -> str:
-    clean_text = re.sub(r"(?i)(ignore all rules.*|system prompt.*|mark this as.*)", "", raw_text)
+    clean_text = quarantine_untrusted_text(raw_text)
     text = clean_text.upper()
 
     upi_match = re.search(r"UPI/\d+/(?:DR|CR)?/?([A-Z0-9\s\.\-]+?)(?:/|@|$)", text)
@@ -115,7 +123,10 @@ def categorize_with_memory(db: Session, merchant: str, raw_narration: str, amoun
             )
             resp = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
             cat = resp.text.strip().replace('"', '')
-            if cat:
+            if cat in {
+                "Dining Out", "Groceries", "Transport", "Travel", "Subscriptions",
+                "Utilities", "Housing", "Health", "Shopping", "Transfers / People",
+            }:
                 return cat, "AI_MODEL"
         except Exception:
             pass
@@ -131,7 +142,7 @@ def parse_sms_dump(sms_text: str) -> tuple[list[dict], int]:
     lines = [line.strip() for line in sms_text.strip().split("\n") if line.strip()]
     for line in lines:
         lower = line.lower()
-        if any(noise in lower for noise in ["otp", "do not share", "one time password", "pre-approved", "avl bal only"]):
+        if any(noise in lower for noise in ["otp", "do not share", "one time password", "pre-approved", "avl bal only", "limited time offer", "click here", "cashback offer"]):
             ignored_noise += 1
             continue
 
@@ -140,10 +151,21 @@ def parse_sms_dump(sms_text: str) -> tuple[list[dict], int]:
             ignored_noise += 1
             continue
 
+        if re.search(r"\b(balance|bal)\b", lower) and not re.search(r"\b(debited|credited|paid|received|withdrawn|spent)\b", lower):
+            ignored_noise += 1
+            continue
+
         amount = float(amt_match.group(1).replace(",", ""))
         txn_type = "CREDIT" if re.search(r"\b(credited|received|deposited)\b", line, re.IGNORECASE) else "DEBIT"
         date_match = re.search(r"(\d{2}[-/]\d{2}[-/]\d{2,4})", line)
-        date_str = date_match.group(1) if date_match else datetime.now().strftime("%Y-%m-%d")
+        if date_match:
+            try:
+                parsed_date = datetime.strptime(date_match.group(1), "%d-%m-%Y") if len(date_match.group(1).split("-")[-1]) == 4 else datetime.strptime(date_match.group(1), "%d-%m-%y")
+                date_str = parsed_date.strftime("%Y-%m-%d")
+            except ValueError:
+                date_str = date_match.group(1)
+        else:
+            date_str = datetime.now().strftime("%Y-%m-%d")
 
         merchant_match = re.search(r"(?:to|at|towards|VPA)\s+([A-Za-z0-9@\.\-_ ]+?)(?:\s+on|\s+Ref|\.|$)", line, re.IGNORECASE)
         raw_m = merchant_match.group(1).strip() if merchant_match else line
@@ -168,8 +190,10 @@ def parse_csv_bytes(file_bytes: bytes) -> list[dict]:
 
     date_col = next((v for k, v in cols.items() if "date" in k), df.columns[0])
     desc_col = next((v for k, v in cols.items() if any(x in k for x in ["narration", "desc", "particular", "remark", "merchant"])), df.columns[1])
-    debit_col = next((v for k, v in cols.items() if any(x in k for x in ["debit", "withdrawal", "amount", "dr"])), None)
-    credit_col = next((v for k, v in cols.items() if any(x in k for x in ["credit", "deposit", "cr"])), None)
+    debit_col = next((v for k, v in cols.items() if k in {"debit", "debit amount", "withdrawal", "withdrawals", "dr", "dr amount", "paid out"} or "debit" in k or "withdrawal" in k), None)
+    credit_col = next((v for k, v in cols.items() if k in {"credit", "credit amount", "deposit", "deposits", "cr", "cr amount", "paid in"} or "credit" in k or "deposit" in k), None)
+    amount_col = next((v for k, v in cols.items() if k in {"amount", "transaction amount", "txn amount", "amt"}), None)
+    type_col = next((v for k, v in cols.items() if k in {"type", "dr/cr", "dr cr", "transaction type", "txn type", "debit/credit"}), None)
 
     results = []
     for _, row in df.iterrows():
@@ -180,13 +204,19 @@ def parse_csv_bytes(file_bytes: bytes) -> list[dict]:
         txn_type = "DEBIT"
 
         if debit_col and pd.notna(row.get(debit_col)) and str(row.get(debit_col)).strip() not in ("", "0", "0.0"):
-            val = re.sub(r"[^\d\.]", "", str(row.get(debit_col)))
+            val = re.sub(r"[^\d.]", "", str(row.get(debit_col)))
             amount = float(val) if val else 0.0
             txn_type = "DEBIT"
         elif credit_col and pd.notna(row.get(credit_col)) and str(row.get(credit_col)).strip() not in ("", "0", "0.0"):
-            val = re.sub(r"[^\d\.]", "", str(row.get(credit_col)))
+            val = re.sub(r"[^\d.]", "", str(row.get(credit_col)))
             amount = float(val) if val else 0.0
             txn_type = "CREDIT"
+        elif amount_col and pd.notna(row.get(amount_col)) and str(row.get(amount_col)).strip() not in ("", "0", "0.0"):
+            raw_amount = str(row.get(amount_col)).strip()
+            val = re.sub(r"[^\d.]", "", raw_amount)
+            amount = float(val) if val else 0.0
+            direction = str(row.get(type_col, "") if type_col else "").strip().lower()
+            txn_type = "CREDIT" if direction in {"credit", "cr", "deposit", "received", "in"} else "DEBIT"
 
         if amount > 0:
             results.append({
@@ -236,9 +266,23 @@ def detect_recurring_and_creep(db: Session):
     alerts = []
     for merchant, items in by_merchant.items():
         if len(items) >= 2:
-            items_sorted = sorted(items, key=lambda x: x.date)
+            def date_key(item):
+                try:
+                    return datetime.strptime(item.date, "%Y-%m-%d")
+                except ValueError:
+                    for date_format in ("%d-%m-%Y", "%d/%m/%Y", "%d-%m-%y", "%d/%m/%y"):
+                        try:
+                            return datetime.strptime(item.date, date_format)
+                        except ValueError:
+                            pass
+                return datetime.min
+
+            items_sorted = sorted(items, key=date_key)
             latest = items_sorted[-1]
             prev = items_sorted[-2]
+            cadence_days = (date_key(latest) - date_key(prev)).days
+            if cadence_days < 20 or cadence_days > 45:
+                continue
             still_uses = feedback_map.get(merchant, "unsure")
 
             for item in items_sorted:
@@ -291,27 +335,28 @@ def run_what_if_simulation(
     goals = db.query(FinancialGoal).all()
     txns = db.query(Transaction).filter(Transaction.txn_type == "DEBIT").all()
 
-    dining_spend = sum(t.amount for t in txns if t.category == "Dining Out") or 12000.0
-    other_var_spend = sum(t.amount for t in txns if t.category not in ("Dining Out", "Housing", "Income", "Transfers / People")) or 14000.0
-    unused_sub_savings = 1499.0 if cancel_unused_subs else 0.0
+    dining_spend = sum(t.amount for t in txns if t.category == "Dining Out")
+    other_var_spend = sum(t.amount for t in txns if t.category not in ("Dining Out", "Housing", "Income", "Transfers / People"))
+    unused_merchants = {f.merchant.upper() for f in db.query(SubscriptionFeedback).filter(SubscriptionFeedback.still_uses == "no").all()}
+    unused_sub_savings = sum(t.amount for t in txns if cancel_unused_subs and t.category == "Subscriptions" and t.merchant.upper() in unused_merchants)
 
-    base_surplus = max(1000.0, profile.monthly_income - profile.fixed_costs - dining_spend - other_var_spend)
+    base_surplus = profile.monthly_income - profile.fixed_costs - dining_spend - other_var_spend
     dining_saved = dining_spend * (dining_cut_pct / 100.0)
-    new_surplus = max(500.0, base_surplus + dining_saved - rent_change + unused_sub_savings + extra_income)
+    new_surplus = base_surplus + dining_saved - rent_change + unused_sub_savings + extra_income
 
     goal_impacts = []
     for g in goals:
         remaining = max(0.0, g.target_amount - g.saved_amount)
-        base_months = remaining / base_surplus
-        new_months = remaining / new_surplus
-        days_delta = round((base_months - new_months) * 30)
+        base_months = remaining / base_surplus if base_surplus > 0 else None
+        new_months = remaining / new_surplus if new_surplus > 0 else None
+        days_delta = round((base_months - new_months) * 30) if base_months is not None and new_months is not None else None
 
-        new_completion = (datetime.now() + timedelta(days=int(new_months * 30))).strftime("%b %Y")
+        new_completion = (datetime.now() + timedelta(days=int(new_months * 30))).strftime("%b %Y") if new_months is not None else None
         goal_impacts.append({
             "goal_name": g.name,
             "remaining": remaining,
-            "base_months": round(base_months, 1),
-            "new_months": round(new_months, 1),
+            "base_months": round(base_months, 1) if base_months is not None else None,
+            "new_months": round(new_months, 1) if new_months is not None else None,
             "days_saved": days_delta,
             "projected_completion": new_completion
         })
@@ -345,7 +390,7 @@ def generate_guardrailed_coach_reply(db: Session, user_message: str) -> dict:
     txns = db.query(Transaction).filter(Transaction.txn_type == "DEBIT").all()
     cat_totals = {}
     for t in txns:
-        if t.category != "Transfers / People":
+        if t.category not in ("Transfers / People", "Housing", "Utilities"):
             cat_totals[t.category] = cat_totals.get(t.category, 0.0) + t.amount
 
     context_summary = (
@@ -369,12 +414,27 @@ def generate_guardrailed_coach_reply(db: Session, user_message: str) -> dict:
         except Exception:
             pass
 
-    top_cat = max(cat_totals.items(), key=lambda x: x[1]) if cat_totals else ("Dining Out", 12000)
+    top_cat = max(cat_totals.items(), key=lambda x: x[1]) if cat_totals else ("No variable category recorded", 0)
+    emergency_pct = round((profile.emergency_fund_current / profile.emergency_fund_target) * 100) if profile.emergency_fund_target > 0 else 0
+    primary_goal = min(goals, key=lambda goal: goal.priority) if goals else None
+    modeled_surplus = profile.monthly_income - profile.fixed_costs - sum(cat_totals.values())
+    days_impact = None
+    if primary_goal and modeled_surplus > 0:
+        remaining = max(0, primary_goal.target_amount - primary_goal.saved_amount)
+        trimmed_surplus = modeled_surplus + top_cat[1] * 0.25
+        if trimmed_surplus > 0:
+            days_impact = round((remaining / modeled_surplus - remaining / trimmed_surplus) * 30)
+
+    timeline = (
+        f" That would move your primary goal about {days_impact} days sooner under this constant-surplus model."
+        if days_impact is not None
+        else " A goal timeline is unavailable because the modeled monthly surplus is not positive."
+    )
     return {
         "guardrail_triggered": False,
         "reply": (
             f"Based on your verified ledger, your largest variable outflow is **{top_cat[0]} (₹{int(top_cat[1]):,})**. "
-            f"Your Emergency Buffer is **{round((profile.emergency_fund_current/profile.emergency_fund_target)*100)}% funded**. "
-            f"Trimming {top_cat[0]} by 25% frees up **₹{int(top_cat[1]*0.25):,}/month**, pulling your primary goal forward by ~18 days."
+            f"Your Emergency Buffer is **{emergency_pct}% funded**. "
+            f"Trimming {top_cat[0]} by 25% frees up **₹{int(top_cat[1]*0.25):,}/month**.{timeline}"
         )
     }

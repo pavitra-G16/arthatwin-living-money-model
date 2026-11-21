@@ -1,11 +1,14 @@
-from fastapi import FastAPI, Depends, UploadFile, File
+import os
+
+from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from database import SessionLocal, init_db, Transaction, LearnedRule, SubscriptionFeedback, FinancialProfile, FinancialGoal
 from engine import (
     categorize_with_memory,
+    quarantine_untrusted_text,
     extract_merchant_token,
     detect_prompt_injection,
     parse_sms_dump,
@@ -21,8 +24,8 @@ app = FastAPI(title="ArthaTwin — Living Money Model API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "*").split(",")],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -55,18 +58,27 @@ class SubFeedbackRequest(BaseModel):
 
 
 class ProfileUpdateRequest(BaseModel):
-    monthly_income: float
-    fixed_costs: float
-    emergency_fund_current: float
-    emergency_fund_target: float
-    discretionary_budget: float
+    monthly_income: float = Field(ge=0)
+    fixed_costs: float = Field(ge=0)
+    emergency_fund_current: float = Field(ge=0)
+    emergency_fund_target: float = Field(ge=0)
+    discretionary_budget: float = Field(ge=0)
+
+
+class GoalRequest(BaseModel):
+    id: int | None = None
+    name: str
+    target_amount: float = Field(ge=0)
+    saved_amount: float = Field(default=0, ge=0)
+    target_date: str
+    priority: int = 1
 
 
 class SimulationRequest(BaseModel):
-    dining_cut_pct: float = 0.0
-    rent_change: float = 0.0
+    dining_cut_pct: float = Field(default=0.0, ge=0, le=100)
+    rent_change: float = Field(default=0.0, ge=0)
     cancel_unused_subs: bool = False
-    extra_income: float = 0.0
+    extra_income: float = Field(default=0.0, ge=0)
 
 
 class ChatRequest(BaseModel):
@@ -102,7 +114,8 @@ def seed_indian_demo_data(db: Session = Depends(get_db)):
     for dt, raw, src, amt, ttype in demo_raw:
         sec_flag = detect_prompt_injection(raw)
         merchant = extract_merchant_token(raw)
-        cat, conf = ("Income", "RULE_ENGINE") if ttype == "CREDIT" else categorize_with_memory(db, merchant, raw, amt)
+        safe_raw = quarantine_untrusted_text(raw)
+        cat, conf = ("Income", "RULE_ENGINE") if ttype == "CREDIT" else categorize_with_memory(db, merchant, safe_raw, amt)
         db.add(Transaction(
             date=dt, raw_narration=raw, merchant=merchant,
             amount=amt, txn_type=ttype, category=cat,
@@ -125,8 +138,25 @@ def update_profile(payload: ProfileUpdateRequest, db: Session = Depends(get_db))
     return {"status": "updated", "profile": profile}
 
 
+@app.post("/api/goals")
+def save_goal(payload: GoalRequest, db: Session = Depends(get_db)):
+    goal = db.query(FinancialGoal).filter(FinancialGoal.id == payload.id).first() if payload.id else None
+    if payload.id and not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    if goal is None:
+        goal = FinancialGoal()
+        db.add(goal)
+    for field, value in payload.model_dump(exclude={"id"}).items():
+        setattr(goal, field, value)
+    db.commit()
+    db.refresh(goal)
+    return {"status": "saved", "goal": goal}
+
+
 @app.post("/api/subscriptions/feedback")
 def set_subscription_feedback(payload: SubFeedbackRequest, db: Session = Depends(get_db)):
+    if payload.still_uses not in {"yes", "no", "unsure"}:
+        raise HTTPException(status_code=422, detail="still_uses must be yes, no, or unsure")
     m = payload.merchant.upper()
     existing = db.query(SubscriptionFeedback).filter(SubscriptionFeedback.merchant == m).first()
     if existing:
@@ -141,7 +171,8 @@ def set_subscription_feedback(payload: SubFeedbackRequest, db: Session = Depends
 def ingest_sms(payload: SmsIngestRequest, db: Session = Depends(get_db)):
     parsed, ignored_noise = parse_sms_dump(payload.sms_text)
     for item in parsed:
-        cat, conf = ("Income", "RULE_ENGINE") if item["txn_type"] == "CREDIT" else categorize_with_memory(db, item["merchant"], item["raw_narration"], item["amount"])
+        safe_raw = quarantine_untrusted_text(item["raw_narration"])
+        cat, conf = ("Income", "RULE_ENGINE") if item["txn_type"] == "CREDIT" else categorize_with_memory(db, item["merchant"], safe_raw, item["amount"])
         db.add(Transaction(**item, category=cat, confidence_source=conf))
     db.commit()
     alerts = detect_recurring_and_creep(db)
@@ -151,10 +182,13 @@ def ingest_sms(payload: SmsIngestRequest, db: Session = Depends(get_db)):
 @app.post("/api/ingest/file")
 async def ingest_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
     content = await file.read()
-    fname = file.filename.lower()
+    fname = (file.filename or "").lower()
+    if not (fname.endswith(".pdf") or fname.endswith(".csv")):
+        raise HTTPException(status_code=415, detail="Upload a PDF or CSV statement")
     parsed = parse_pdf_bytes(content) if fname.endswith(".pdf") else parse_csv_bytes(content)
     for item in parsed:
-        cat, conf = ("Income", "RULE_ENGINE") if item["txn_type"] == "CREDIT" else categorize_with_memory(db, item["merchant"], item["raw_narration"], item["amount"])
+        safe_raw = quarantine_untrusted_text(item["raw_narration"])
+        cat, conf = ("Income", "RULE_ENGINE") if item["txn_type"] == "CREDIT" else categorize_with_memory(db, item["merchant"], safe_raw, item["amount"])
         db.add(Transaction(**item, category=cat, confidence_source=conf))
     db.commit()
     alerts = detect_recurring_and_creep(db)
@@ -213,15 +247,16 @@ def get_dashboard_state(db: Session = Depends(get_db)):
     discretionary_spent = sum(t.amount for t in debits if t.category in ("Dining Out", "Shopping", "Subscriptions"))
 
     nudges = []
-    if discretionary_spent > profile.discretionary_budget * 0.45:
+    if discretionary_spent > profile.discretionary_budget:
+        over_plan = round(discretionary_spent - profile.discretionary_budget)
         nudges.append({
             "severity": "WARNING",
-            "title": "Discretionary Pace Drift Detected",
-            "message": f"Discretionary spend is ₹{int(discretionary_spent):,} — tracking 22% above your monthly plan. Trimming 3 Dining orders saves ~2 days on your MacBook goal."
+            "title": "Discretionary Budget Exceeded",
+            "message": f"Verified discretionary spend is ₹{int(discretionary_spent):,}, ₹{over_plan:,} above your ₹{int(profile.discretionary_budget):,} monthly plan."
         })
 
-    ef_ratio = min(1.0, profile.emergency_fund_current / profile.emergency_fund_target)
-    savings_rate = max(0.0, (profile.monthly_income - total_spent) / profile.monthly_income)
+    ef_ratio = min(1.0, profile.emergency_fund_current / profile.emergency_fund_target) if profile.emergency_fund_target > 0 else 0.0
+    savings_rate = max(0.0, (profile.monthly_income - total_spent) / profile.monthly_income) if profile.monthly_income > 0 else 0.0
     health_score = min(98, max(35, int((ef_ratio * 45) + (savings_rate * 55))))
 
     cat_breakdown = {}
