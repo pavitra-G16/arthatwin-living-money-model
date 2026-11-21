@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: arthatwin-post-submission-api
+    runtime: python
+    plan: free
+    branch: post-submission
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: ARTHATWIN_PUBLIC_DEMO
+        value: "1"
+      - key: SEED_SYNTHETIC_DEMO_ON_START
+        value: "1"
+      - key: DEMO_RESET_TOKEN
+        generateValue: true
+      - key: CORS_ALLOWED_ORIGINS
+        value: "*"
+
+  - type: web
+    name: arthatwin-post-submission-web
+    runtime: node
+    plan: free
+    branch: post-submission
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    startCommand: "npm run start -- --hostname 0.0.0.0 --port $PORT"
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: NEXT_PUBLIC_ARTHATWIN_PUBLIC_DEMO
+        value: "1"
